@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+*.lock
+.git/
+supabase/.temp/
+test-data/
+*.log
+coverage/
+public/
+plans/         # Claude reads plans on demand, not auto-loaded
