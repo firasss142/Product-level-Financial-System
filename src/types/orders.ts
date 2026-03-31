@@ -102,6 +102,7 @@ export type NavexCostStatus = NavexZoneStatus;
 
 export interface CartItem {
   quantity?: number;
+  selectedVariantsId?: string;
   [key: string]: unknown;
 }
 
@@ -109,7 +110,7 @@ export interface CartItem {
 
 export interface OrderRow {
   id: string;
-  account_id: string;
+  store_id: string | null;
   product_id: string | null;
   reference: string;
   total_price: number | null;
@@ -119,4 +120,16 @@ export interface OrderRow {
   is_test: boolean;
   cart: CartItem[] | null;
   converty_created_at: string | null;
+  /** Converty internal order _id */
+  converty_order_id: string | null;
+  /** cart[0].selectedVariantsId from Converty API */
+  selected_variant_id: string | null;
+  /** Matched variant SKU */
+  selected_variant_sku: string | null;
+  /**
+   * Resolved unit count from variant_quantity_map.
+   * Defaults to 1 if variant not mapped.
+   * Used for COGS calculation instead of cart quantity.
+   */
+  variant_unit_count: number;
 }

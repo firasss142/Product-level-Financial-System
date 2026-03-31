@@ -17,8 +17,8 @@ import { fmtNumber } from "@/lib/format";
 interface Product {
   id: string;
   name: string;
-  account_id: string;
-  account_name: string | null;
+  store_id: string;
+  store_name: string | null;
   unit_cogs: number;
   is_active: boolean;
   created_at: string;
@@ -79,9 +79,9 @@ function ProductsPage() {
       sortable: true,
     },
     {
-      id: "account",
-      header: "Compte",
-      accessorKey: "account_name",
+      id: "store",
+      header: "Boutique",
+      accessorKey: "store_name",
       sortable: true,
       cell: (value) => (
         <span className="text-warm-gray-600">{(value as string | null) ?? "—"}</span>

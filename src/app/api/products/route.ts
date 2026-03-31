@@ -4,14 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 
 const CreateSchema = z.object({
   name: z.string().min(1),
-  account_id: z.string().uuid(),
+  store_id: z.string().uuid(),
 });
 
 const UpdateSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).optional(),
-  account_id: z.string().uuid().optional(),
+  store_id: z.string().uuid().optional(),
   is_active: z.boolean().optional(),
+  converty_product_id: z.string().nullable().optional(),
+  variant_quantity_map: z.record(z.string(), z.number().int().positive()).optional(),
 });
 
 const DEFAULT_COMPONENTS = [
@@ -23,16 +25,16 @@ const DEFAULT_COMPONENTS = [
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const accountId = searchParams.get("account_id");
+    const storeId = searchParams.get("store_id");
 
     const supabase = await createClient();
     let query = supabase
       .from("products")
-      .select("id, name, account_id, unit_cogs, is_active, created_at, accounts(name)")
+      .select("id, name, store_id, unit_cogs, is_active, created_at, stores(name)")
       .order("created_at", { ascending: false });
 
-    if (accountId) {
-      query = query.eq("account_id", accountId);
+    if (storeId) {
+      query = query.eq("store_id", storeId);
     }
 
     const { data, error } = await query;
@@ -41,8 +43,8 @@ export async function GET(request: Request) {
     const rows = (data ?? []).map((p) => ({
       id: p.id,
       name: p.name,
-      account_id: p.account_id,
-      account_name: (p.accounts as unknown as { name: string } | null)?.name ?? null,
+      store_id: p.store_id,
+      store_name: (p.stores as unknown as { name: string } | null)?.name ?? null,
       unit_cogs: p.unit_cogs,
       is_active: p.is_active,
       created_at: p.created_at,
@@ -71,7 +73,7 @@ export async function POST(request: Request) {
     const { data: product, error: insertError } = await supabase
       .from("products")
       .insert({ ...parsed.data, is_active: true, unit_cogs: 0 })
-      .select("id, name, account_id, unit_cogs, is_active, created_at")
+      .select("id, name, store_id, unit_cogs, is_active, created_at")
       .single();
 
     if (insertError) throw new Error(insertError.message);
@@ -109,7 +111,7 @@ export async function PATCH(request: Request) {
       .from("products")
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .select("id, name, account_id, unit_cogs, is_active, created_at")
+      .select("id, name, store_id, unit_cogs, is_active, created_at")
       .single();
 
     if (error) throw new Error(error.message);

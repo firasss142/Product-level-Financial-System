@@ -19,9 +19,11 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { fmtNumber, fmtDateMedium } from "@/lib/format";
+import type { ProductBatch as Batch } from "@/types/product";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
+/** Editable form state for a cost component — id/product_id optional before save */
 interface CostComponent {
   id?: string;
   label: string;
@@ -30,30 +32,20 @@ interface CostComponent {
   sort_order?: number;
 }
 
-interface Batch {
-  id: string;
-  batch_number: string;
-  quantity: number;
-  unit_cost: number;
-  supplier: string | null;
-  notes: string | null;
-  cost_breakdown: Array<{ label: string; amount: number }>;
-  created_at: string;
-}
-
 interface ProductDetail {
   id: string;
   name: string;
-  account_id: string;
-  account_name: string | null;
+  store_id: string;
+  store_name: string | null;
   unit_cogs: number;
+  variant_quantity_map: Record<string, number>;
   is_active: boolean;
   created_at: string;
   cost_components: CostComponent[];
   batches: Batch[];
 }
 
-// ── Formatters (from shared lib/format) ─────────────────────────────────────
+// ── Formatters ───────────────────────────────────────────────────────────────
 
 const fmt = fmtNumber;
 const fmtDate = fmtDateMedium;
@@ -62,15 +54,15 @@ const fmtDate = fmtDateMedium;
 
 function InfoSection({
   product,
-  accounts,
+  stores,
   onSave,
 }: {
   product: ProductDetail;
-  accounts: SelectOption[];
-  onSave: (updates: { name?: string; account_id?: string; is_active?: boolean }) => Promise<void>;
+  stores: SelectOption[];
+  onSave: (updates: { name?: string; store_id?: string; is_active?: boolean }) => Promise<void>;
 }) {
   const [name, setName] = useState(product.name);
-  const [accountId, setAccountId] = useState(product.account_id);
+  const [storeId, setStoreId] = useState(product.store_id);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string }>({});
 
@@ -80,7 +72,7 @@ function InfoSection({
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), account_id: accountId });
+      await onSave({ name: name.trim(), store_id: storeId });
     } finally {
       setSaving(false);
     }
@@ -109,10 +101,10 @@ function InfoSection({
             error={errors.name}
           />
           <Select
-            label="Compte"
-            options={accounts}
-            value={accountId}
-            onValueChange={setAccountId}
+            label="Boutique"
+            options={stores}
+            value={storeId}
+            onValueChange={setStoreId}
           />
           <div>
             <p className="text-sm font-medium text-navy mb-1.5">Statut</p>
@@ -286,7 +278,6 @@ function BatchSection({
   const [saving, setSaving] = useState(false);
   const params = useParams<{ id: string }>();
 
-  // Form state
   const [batchNumber, setBatchNumber] = useState("");
   const [quantity, setQuantity] = useState("");
   const [supplier, setSupplier] = useState("");
@@ -405,7 +396,7 @@ function BatchSection({
                       </td>
                       <td className="px-4 py-3 text-warm-gray-600">{fmtDate(batch.created_at)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-navy">{batch.quantity}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-navy font-medium">{fmt(batch.unit_cost)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-navy font-medium">{fmt(batch.unit_cogs)}</td>
                       <td className="px-4 py-3 text-warm-gray-600">{batch.supplier ?? "—"}</td>
                     </tr>
                     {expanded === batch.id && (
@@ -435,7 +426,6 @@ function BatchSection({
           </div>
         )}
 
-        {/* New batch modal */}
         <Modal
           open={modalOpen}
           onOpenChange={setModalOpen}
@@ -479,8 +469,6 @@ function BatchSection({
                 className="w-full rounded-lg border border-warm-gray-200 bg-white px-3 py-2 text-sm text-navy focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none transition-colors placeholder:text-warm-gray-400 resize-none"
               />
             </div>
-
-            {/* Cost components for this batch */}
             <div>
               <p className="text-sm font-medium text-navy mb-2">Composants du coût</p>
               <table className="w-full text-sm">
@@ -511,7 +499,6 @@ function BatchSection({
                 </tbody>
               </table>
             </div>
-
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -528,6 +515,131 @@ function BatchSection({
   );
 }
 
+// ── Section 4: Variant Quantity Map ──────────────────────────────────────────
+
+function VariantMapSection({
+  initialMap,
+  onSave,
+}: {
+  initialMap: Record<string, number>;
+  onSave: (map: Record<string, number>) => Promise<void>;
+}) {
+  const [entries, setEntries] = useState<Array<{ variantId: string; count: number }>>(
+    Object.entries(initialMap).map(([variantId, count]) => ({ variantId, count }))
+  );
+  const [saving, setSaving] = useState(false);
+
+  function addEntry() {
+    setEntries((prev) => [...prev, { variantId: "", count: 1 }]);
+  }
+
+  function removeEntry(idx: number) {
+    setEntries((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function updateVariantId(idx: number, value: string) {
+    setEntries((prev) => prev.map((e, i) => i === idx ? { ...e, variantId: value } : e));
+  }
+
+  function updateCount(idx: number, value: string) {
+    const num = parseInt(value, 10) || 1;
+    setEntries((prev) => prev.map((e, i) => i === idx ? { ...e, count: Math.max(1, num) } : e));
+  }
+
+  async function handleSave() {
+    // Build map, skip entries with empty variant IDs
+    const map: Record<string, number> = {};
+    for (const { variantId, count } of entries) {
+      if (variantId.trim()) {
+        map[variantId.trim()] = count;
+      }
+    }
+    setSaving(true);
+    try {
+      await onSave(map);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Correspondance variantes</CardTitle>
+          <Button variant="secondary" size="sm" onClick={addEntry}>
+            + Ajouter une variante
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xs text-warm-gray-500 mb-4">
+          Définissez le nombre d&apos;unités réelles par variante Converty.
+          Utilisé pour le calcul du coût produit (COGS) à la livraison.
+        </p>
+        {entries.length === 0 ? (
+          <p className="text-sm text-warm-gray-400 py-2">Aucune variante configurée</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-warm-gray-200">
+                  <th className="text-left px-0 py-2 text-xs font-medium text-warm-gray-500">
+                    ID Variante Converty
+                  </th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-warm-gray-500 whitespace-nowrap">
+                    Quantité d&apos;unités
+                  </th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, idx) => (
+                  <tr key={idx} className="border-b border-warm-gray-100">
+                    <td className="py-2 pr-4">
+                      <input
+                        type="text"
+                        value={entry.variantId}
+                        onChange={(e) => updateVariantId(idx, e.target.value)}
+                        placeholder="ex. variant-7rpx9xs0r"
+                        className="w-full rounded border border-warm-gray-200 px-2 py-1 text-sm font-mono text-navy focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none"
+                      />
+                    </td>
+                    <td className="py-2 px-4">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={entry.count}
+                        onChange={(e) => updateCount(idx, e.target.value)}
+                        className="w-20 rounded border border-warm-gray-200 px-2 py-1 text-sm text-right tabular-nums text-navy focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none ml-auto block"
+                      />
+                    </td>
+                    <td className="py-2 pl-2 text-center">
+                      <button
+                        onClick={() => removeEntry(idx)}
+                        className="text-warm-gray-400 hover:text-terracotta transition-colors text-lg leading-none cursor-pointer"
+                        aria-label="Supprimer"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="mt-4 flex justify-end">
+          <Button onClick={() => void handleSave()} loading={saving}>
+            Enregistrer la correspondance
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 function ProductDetailPage() {
@@ -537,7 +649,7 @@ function ProductDetailPage() {
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<SelectOption[]>([]);
+  const [stores, setStores] = useState<SelectOption[]>([]);
 
   useEffect(() => {
     void Promise.all([
@@ -545,17 +657,17 @@ function ProductDetailPage() {
         if (r.status === 404) { router.push("/products"); return null; }
         return r.json() as Promise<ProductDetail>;
       }),
-      fetch("/api/accounts").then((r) => r.json() as Promise<Array<{ id: string; name: string; is_active: boolean }>>),
+      fetch("/api/stores").then((r) => r.json() as Promise<Array<{ id: string; name: string; is_active: boolean }>>),
     ])
-      .then(([productData, accountsData]) => {
+      .then(([productData, storesData]) => {
         if (productData) setProduct(productData);
-        setAccounts(accountsData.filter((a) => a.is_active).map((a) => ({ value: a.id, label: a.name })));
+        setStores(storesData.filter((s) => s.is_active).map((s) => ({ value: s.id, label: s.name })));
       })
       .catch(() => toast({ title: "Impossible de charger le produit", variant: "error" }))
       .finally(() => setLoading(false));
   }, [params.id, router, toast]);
 
-  const handleInfoSave = useCallback(async (updates: { name?: string; account_id?: string; is_active?: boolean }) => {
+  const handleInfoSave = useCallback(async (updates: { name?: string; store_id?: string; is_active?: boolean }) => {
     if (!product) return;
     try {
       const res = await fetch("/api/products", {
@@ -567,7 +679,7 @@ function ProductDetailPage() {
         const body = (await res.json()) as { error?: string };
         throw new Error(body.error ?? "Erreur inconnue");
       }
-      const updated = (await res.json()) as { name: string; account_id: string; is_active: boolean };
+      const updated = (await res.json()) as { name: string; store_id: string; is_active: boolean };
       setProduct((prev) => prev ? { ...prev, ...updated } : prev);
       toast({ title: "Informations mises à jour", variant: "success" });
     } catch (err) {
@@ -607,7 +719,6 @@ function ProductDetailPage() {
 
   const handleNewBatch = useCallback((batch: Batch, setAsActive: boolean) => {
     setProduct((prev) => prev ? { ...prev, batches: [batch, ...prev.batches] } : prev);
-    // Only refetch when unit_cogs changed server-side
     if (setAsActive) {
       void fetch(`/api/products/${params.id}`)
         .then((r) => r.json() as Promise<ProductDetail>)
@@ -615,6 +726,30 @@ function ProductDetailPage() {
         .catch(() => {/* non-critical */});
     }
   }, [params.id]);
+
+  const handleVariantMapSave = useCallback(async (map: Record<string, number>) => {
+    if (!product) return;
+    try {
+      const res = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: product.id, variant_quantity_map: map }),
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? "Erreur inconnue");
+      }
+      setProduct((prev) => prev ? { ...prev, variant_quantity_map: map } : prev);
+      toast({ title: "Correspondance variantes enregistrée", variant: "success" });
+    } catch (err) {
+      toast({
+        title: "Échec de l'enregistrement",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "error",
+      });
+      throw err;
+    }
+  }, [product, toast]);
 
   if (loading) {
     return (
@@ -649,7 +784,7 @@ function ProductDetailPage() {
 
       <InfoSection
         product={product}
-        accounts={accounts}
+        stores={stores}
         onSave={handleInfoSave}
       />
 
@@ -662,6 +797,11 @@ function ProductDetailPage() {
         batches={product.batches}
         currentComponents={product.cost_components}
         onNewBatch={handleNewBatch}
+      />
+
+      <VariantMapSection
+        initialMap={product.variant_quantity_map}
+        onSave={handleVariantMapSave}
       />
     </div>
   );

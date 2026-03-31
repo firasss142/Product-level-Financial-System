@@ -15,7 +15,7 @@ import {
   type SelectOption,
 } from "@/components/ui";
 
-interface Account {
+interface Store {
   id: string;
   name: string;
 }
@@ -25,26 +25,26 @@ function NewProductPage() {
   const { toast } = useToast();
 
   const [name, setName] = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; account_id?: string }>({});
+  const [storeId, setStoreId] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; store_id?: string }>({});
   const [loading, setLoading] = useState(false);
-  const [accounts, setAccounts] = useState<SelectOption[]>([]);
-  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [stores, setStores] = useState<SelectOption[]>([]);
+  const [storesLoading, setStoresLoading] = useState(true);
 
   useEffect(() => {
-    void fetch("/api/accounts")
+    void fetch("/api/stores")
       .then((r) => r.json())
-      .then((data: Account[]) =>
-        setAccounts(data.map((a) => ({ value: a.id, label: a.name })))
+      .then((data: Store[]) =>
+        setStores(data.map((s) => ({ value: s.id, label: s.name })))
       )
-      .catch(() => toast({ title: "Impossible de charger les comptes", variant: "error" }))
-      .finally(() => setAccountsLoading(false));
+      .catch(() => toast({ title: "Impossible de charger les boutiques", variant: "error" }))
+      .finally(() => setStoresLoading(false));
   }, [toast]);
 
   async function handleSubmit() {
     const errs: typeof errors = {};
     if (!name.trim()) errs.name = "Champ obligatoire";
-    if (!accountId) errs.account_id = "Sélectionnez un compte";
+    if (!storeId) errs.store_id = "Sélectionnez une boutique";
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     setLoading(true);
@@ -52,7 +52,7 @@ function NewProductPage() {
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), account_id: accountId }),
+        body: JSON.stringify({ name: name.trim(), store_id: storeId }),
       });
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
@@ -99,13 +99,13 @@ function NewProductPage() {
               placeholder="ex. Rouleau Magique"
             />
             <Select
-              label="Compte"
-              options={accounts}
-              value={accountId}
-              onValueChange={(v) => { setAccountId(v); setErrors((p) => ({ ...p, account_id: undefined })); }}
-              placeholder={accountsLoading ? "Chargement…" : "Sélectionner un compte"}
-              disabled={accountsLoading}
-              error={errors.account_id}
+              label="Boutique"
+              options={stores}
+              value={storeId}
+              onValueChange={(v) => { setStoreId(v); setErrors((p) => ({ ...p, store_id: undefined })); }}
+              placeholder={storesLoading ? "Chargement…" : "Sélectionner une boutique"}
+              disabled={storesLoading}
+              error={errors.store_id}
             />
           </div>
 

@@ -15,13 +15,13 @@ import type { Settings } from "@/lib/settings";
 // Products
 // ---------------------------------------------------------------------------
 
-/** Fetch all active products with their account name (for lists / selectors) */
+/** Fetch all active products with their store name (for lists / selectors) */
 export async function queryActiveProducts(
   supabase: SupabaseClient
 ): Promise<ProductSummary[]> {
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, account_id, unit_cogs, is_active, created_at, accounts(name)")
+    .select("id, name, store_id, unit_cogs, is_active, created_at, stores(name)")
     .eq("is_active", true)
     .order("created_at", { ascending: false });
 
@@ -30,8 +30,8 @@ export async function queryActiveProducts(
   return (data ?? []).map((p) => ({
     id: p.id as string,
     name: p.name as string,
-    account_id: p.account_id as string,
-    account_name: (p.accounts as unknown as { name: string } | null)?.name ?? null,
+    store_id: p.store_id as string,
+    store_name: (p.stores as unknown as { name: string } | null)?.name ?? null,
     unit_cogs: p.unit_cogs as number | null,
     is_active: p.is_active as boolean,
     created_at: p.created_at as string,
@@ -46,7 +46,7 @@ export async function queryProductWithCosts(
   const [productResult, componentsResult, batchesResult] = await Promise.all([
     supabase
       .from("products")
-      .select("id, name, account_id, unit_cogs, is_active, created_at, updated_at")
+      .select("id, name, store_id, unit_cogs, converty_product_id, variant_quantity_map, active_batch_id, is_active, created_at, updated_at")
       .eq("id", productId)
       .single(),
     supabase
@@ -56,7 +56,7 @@ export async function queryProductWithCosts(
       .order("sort_order", { ascending: true }),
     supabase
       .from("product_batches")
-      .select("id, product_id, batch_number, quantity, unit_cost, cost_breakdown, supplier, notes, created_at")
+      .select("id, product_id, batch_number, quantity, unit_cogs, cost_breakdown, supplier, notes, created_at")
       .eq("product_id", productId)
       .order("created_at", { ascending: false }),
   ]);
@@ -84,7 +84,7 @@ export async function queryProductWithCosts(
     product_id: b.product_id as string,
     batch_number: b.batch_number as string,
     quantity: b.quantity as number,
-    unit_cost: Number(b.unit_cost),
+    unit_cogs: Number(b.unit_cogs),
     cost_breakdown: (b.cost_breakdown ?? []) as Array<{ label: string; amount: number }>,
     supplier: (b.supplier as string | null) ?? null,
     notes: (b.notes as string | null) ?? null,
@@ -93,9 +93,12 @@ export async function queryProductWithCosts(
 
   return {
     id: p.id as string,
-    account_id: p.account_id as string,
+    store_id: p.store_id as string,
     name: p.name as string,
     unit_cogs: Number(p.unit_cogs ?? 0),
+    converty_product_id: (p.converty_product_id as string | null) ?? null,
+    variant_quantity_map: (p.variant_quantity_map as Record<string, number>) ?? {},
+    active_batch_id: (p.active_batch_id as string | null) ?? null,
     is_active: p.is_active as boolean,
     created_at: p.created_at as string,
     updated_at: p.updated_at as string,
@@ -151,12 +154,12 @@ export async function querySettingByKey(
 export async function queryOrdersForPeriod(
   supabase: SupabaseClient,
   period: Period,
-  options: { productId?: string; accountId?: string } = {}
+  options: { productId?: string; storeId?: string } = {}
 ): Promise<OrderRow[]> {
   let query = supabase
     .from("orders")
     .select(
-      "id, account_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at"
+      "id, store_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at, converty_order_id, selected_variant_id, selected_variant_sku, variant_unit_count"
     )
     .eq("is_duplicated", false)
     .eq("is_test", false)
@@ -166,8 +169,8 @@ export async function queryOrdersForPeriod(
   if (options.productId) {
     query = query.eq("product_id", options.productId);
   }
-  if (options.accountId) {
-    query = query.eq("account_id", options.accountId);
+  if (options.storeId) {
+    query = query.eq("store_id", options.storeId);
   }
 
   const { data, error } = await query;

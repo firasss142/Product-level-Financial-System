@@ -36,25 +36,44 @@ export const SettingsWriteSchema = z.object({
 export type SettingsWriteInput = z.infer<typeof SettingsWriteSchema>;
 
 // ---------------------------------------------------------------------------
-// Accounts — POST /api/accounts, PATCH /api/accounts
+// Converty accounts — POST /api/accounts, PATCH /api/accounts
 // ---------------------------------------------------------------------------
 
-export const AccountCreateSchema = z.object({
-  name: z.string().min(1),
-  platform: z.string().min(1),
-  credentials: z.record(z.string(), z.unknown()).optional(),
+export const ConvertyAccountCreateSchema = z.object({
+  email: z.string().email(),
+  password_encrypted: z.string().min(1),
+  auth_token: z.string().optional(),
 });
 
-export const AccountUpdateSchema = z.object({
+export const ConvertyAccountUpdateSchema = z.object({
   id: UuidSchema,
-  name: z.string().min(1).optional(),
-  platform: z.string().min(1).optional(),
-  credentials: z.record(z.string(), z.unknown()).optional(),
+  auth_token: z.string().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
-export type AccountCreateInput = z.infer<typeof AccountCreateSchema>;
-export type AccountUpdateInput = z.infer<typeof AccountUpdateSchema>;
+export type ConvertyAccountCreateInput = z.infer<typeof ConvertyAccountCreateSchema>;
+export type ConvertyAccountUpdateInput = z.infer<typeof ConvertyAccountUpdateSchema>;
+
+// ---------------------------------------------------------------------------
+// Stores — POST /api/stores, PATCH /api/stores
+// ---------------------------------------------------------------------------
+
+export const StoreCreateSchema = z.object({
+  converty_account_id: UuidSchema,
+  converty_store_id: z.string().min(1),
+  name: z.string().min(1),
+  navex_account_id: z.string().optional(),
+});
+
+export const StoreUpdateSchema = z.object({
+  id: UuidSchema,
+  name: z.string().min(1).optional(),
+  navex_account_id: z.string().nullable().optional(),
+  is_active: z.boolean().optional(),
+});
+
+export type StoreCreateInput = z.infer<typeof StoreCreateSchema>;
+export type StoreUpdateInput = z.infer<typeof StoreUpdateSchema>;
 
 // ---------------------------------------------------------------------------
 // Products — POST /api/products, PATCH /api/products
@@ -62,14 +81,16 @@ export type AccountUpdateInput = z.infer<typeof AccountUpdateSchema>;
 
 export const ProductCreateSchema = z.object({
   name: z.string().min(1),
-  account_id: UuidSchema,
+  store_id: UuidSchema,
 });
 
 export const ProductUpdateSchema = z.object({
   id: UuidSchema,
   name: z.string().min(1).optional(),
-  account_id: UuidSchema.optional(),
+  store_id: UuidSchema.optional(),
   is_active: z.boolean().optional(),
+  converty_product_id: z.string().nullable().optional(),
+  variant_quantity_map: z.record(z.string(), z.number().int().positive()).optional(),
 });
 
 export type ProductCreateInput = z.infer<typeof ProductCreateSchema>;
@@ -143,7 +164,7 @@ export const OrderStatusSchema = z.enum(ORDER_STATUSES);
 export const OrdersQuerySchema = z.object({
   status: z.array(OrderStatusSchema).optional(),
   product_id: UuidSchema.optional(),
-  account_id: UuidSchema.optional(),
+  store_id: UuidSchema.optional(),
   date_from: DateStringSchema.optional(),
   date_to: DateStringSchema.optional(),
   show_all: z.boolean().optional(),

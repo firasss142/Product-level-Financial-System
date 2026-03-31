@@ -16,7 +16,7 @@ import {
 import { ORDER_STATUSES } from "@/types/orders";
 import { statusLabel, statusBadgeVariant, fmtPrice, fmtDateShort } from "@/lib/format";
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface OrderRow {
   id: string;
@@ -28,12 +28,13 @@ interface OrderRow {
   is_test: boolean;
   product_id: string | null;
   product_name: string | null;
-  account_id: string;
-  account_name: string | null;
+  store_id: string | null;
+  store_name: string | null;
   converty_created_at: string | null;
+  variant_unit_count: number;
 }
 
-interface Account {
+interface Store {
   id: string;
   name: string;
 }
@@ -60,18 +61,18 @@ function OrdersPage() {
 
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<SelectOption[]>([]);
+  const [stores, setStores] = useState<SelectOption[]>([]);
   const [products, setProducts] = useState<SelectOption[]>([]);
 
   // Filters
   const [selectedStatus, setSelectedStatus] = useState(ALL);
   const [selectedProduct, setSelectedProduct] = useState(ALL);
-  const [selectedAccount, setSelectedAccount] = useState(ALL);
+  const [selectedStore, setSelectedStore] = useState(ALL);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showAll, setShowAll] = useState(false);
 
-  const isFiltered = selectedStatus !== ALL || selectedProduct !== ALL || selectedAccount !== ALL || !!dateFrom || !!dateTo || showAll;
+  const isFiltered = selectedStatus !== ALL || selectedProduct !== ALL || selectedStore !== ALL || !!dateFrom || !!dateTo || showAll;
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -79,7 +80,7 @@ function OrdersPage() {
       const params = new URLSearchParams();
       if (selectedStatus !== ALL) params.append("status", selectedStatus);
       if (selectedProduct !== ALL) params.set("product_id", selectedProduct);
-      if (selectedAccount !== ALL) params.set("account_id", selectedAccount);
+      if (selectedStore !== ALL) params.set("store_id", selectedStore);
       if (dateFrom) params.set("date_from", dateFrom);
       if (dateTo) params.set("date_to", dateTo);
       if (showAll) params.set("show_all", "true");
@@ -93,20 +94,20 @@ function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedStatus, selectedProduct, selectedAccount, dateFrom, dateTo, showAll, toast]);
+  }, [selectedStatus, selectedProduct, selectedStore, dateFrom, dateTo, showAll, toast]);
 
   useEffect(() => {
     void fetchOrders();
   }, [fetchOrders]);
 
-  // Load accounts + products for filters (independent, fire in parallel)
+  // Load stores + products for filters (independent, fire in parallel)
   useEffect(() => {
-    void fetch("/api/accounts")
+    void fetch("/api/stores")
       .then((r) => r.json())
-      .then((data: Account[]) =>
-        setAccounts([
-          { value: ALL, label: "Tous les comptes" },
-          ...data.map((a) => ({ value: a.id, label: a.name })),
+      .then((data: Store[]) =>
+        setStores([
+          { value: ALL, label: "Toutes les boutiques" },
+          ...data.map((s) => ({ value: s.id, label: s.name })),
         ])
       )
       .catch(() => {/* non-critical */});
@@ -125,7 +126,7 @@ function OrdersPage() {
   function resetFilters() {
     setSelectedStatus(ALL);
     setSelectedProduct(ALL);
-    setSelectedAccount(ALL);
+    setSelectedStore(ALL);
     setDateFrom("");
     setDateTo("");
     setShowAll(false);
@@ -215,10 +216,10 @@ function OrdersPage() {
             </div>
             <div className="w-44">
               <Select
-                label="Compte"
-                options={accounts}
-                value={selectedAccount}
-                onValueChange={setSelectedAccount}
+                label="Boutique"
+                options={stores}
+                value={selectedStore}
+                onValueChange={setSelectedStore}
               />
             </div>
             <div>

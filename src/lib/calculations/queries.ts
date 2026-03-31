@@ -17,7 +17,6 @@ import {
   isFailedLeadStatus,
   FAILED_LEAD_STATUSES,
 } from "@/types/orders";
-import { extractCartQuantity } from "./cost-engine";
 
 // ---------------------------------------------------------------------------
 // Order queries
@@ -35,7 +34,7 @@ export async function fetchProductOrders(
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, account_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at"
+      "id, store_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at, variant_unit_count"
     )
     .eq("product_id", productId)
     .eq("is_duplicated", false)
@@ -58,7 +57,7 @@ export async function fetchAllOrders(
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, account_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at"
+      "id, store_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at, variant_unit_count"
     )
     .eq("is_duplicated", false)
     .eq("is_test", false)
@@ -80,17 +79,8 @@ export interface ProductRow {
 }
 
 /**
- * Aggregate raw order rows into ProductOrderAggregates.
- * Single pass — O(n).
- *
- * Bucket rules:
- * - delivered     = status 'delivered' AND NOT is_exchange
- * - returned      = status in RETURN_STATUSES AND NOT is_exchange
- * - exchange      = is_exchange = true (any status)
- * - shipped       = status in NAVEX_ZONE_STATUSES (any flag)
- * - failedLeads   = status in FAILED_LEAD_STATUSES AND NOT is_exchange
- * - totalOrders   = all rows (already filtered: no dup, no test)
- * - confirmedCount = status NOT in FAILED_LEAD_STATUSES (reached confirmed+)
+ * Aggregate orders into per-product metrics in a single pass — O(n).
+ * COGS uses variant_unit_count (defaults to 1 for legacy/unmapped orders).
  */
 export function aggregateProductOrders(
   orders: OrderRow[],
@@ -116,6 +106,8 @@ export function aggregateProductOrders(
   for (const order of orders) {
     const price = order.total_price ?? 0;
     const status = order.status;
+    // variant_unit_count defaults to 1 for pre-migration orders or unmapped variants
+    const unitCount = order.variant_unit_count ?? 1;
 
     totalOrders++;
 
@@ -128,7 +120,8 @@ export function aggregateProductOrders(
     } else if (status === "delivered") {
       deliveredCount++;
       totalRevenue += price;
-      totalDeliveredCartQuantity += extractCartQuantity(order.cart);
+      // Use variant_unit_count for COGS calculation (Change 5)
+      totalDeliveredCartQuantity += unitCount;
       convertyFeeBaseDelivered += price;
       if (isNavexZoneStatus(status)) shippedCount++;
     } else if (isReturnStatus(status)) {
@@ -139,7 +132,6 @@ export function aggregateProductOrders(
       convertyFeeBaseFailedLeads += price;
     } else {
       // confirmed, uploaded, in transit, unverified, attempt — not yet terminal
-      // Still count Converty fee base if they entered Navex zone
       if (isNavexZoneStatus(status)) shippedCount++;
     }
 

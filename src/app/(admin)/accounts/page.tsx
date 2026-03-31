@@ -1,348 +1,487 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
   Input,
   Button,
   Badge,
-  Select,
-  DataTable,
   Modal,
   useToast,
-  type DataTableColumn,
-  type SelectOption,
 } from "@/components/ui";
+import { fmtDateMedium } from "@/lib/format";
 
-interface Account {
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Store {
   id: string;
+  converty_account_id: string;
+  converty_store_id: string;
   name: string;
-  platform: string;
+  navex_account_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-interface AccountWithCredentials extends Account {
-  credentials?: Record<string, unknown>;
+interface ConvertyAccount {
+  id: string;
+  email: string;
+  auth_token: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  stores: Store[];
 }
 
-const PLATFORM_OPTIONS: SelectOption[] = [
-  { value: "converty", label: "Converty" },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat("fr-TN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(iso));
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  const visible = local.slice(0, 2);
+  return `${visible}${"•".repeat(Math.max(2, local.length - 2))}@${domain}`;
 }
+
+// ── Store row component ───────────────────────────────────────────────────────
+
+function StoreRow({
+  store,
+  onToggle,
+  onEdit,
+}: {
+  store: Store;
+  onToggle: (store: Store) => void;
+  onEdit: (store: Store) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-3 px-4 rounded-lg bg-warm-gray-50 border border-warm-gray-100">
+      <div className="flex items-center gap-4 min-w-0">
+        <div>
+          <p className="text-sm font-medium text-navy">{store.name}</p>
+          <p className="text-xs text-warm-gray-500 font-mono mt-0.5">{store.converty_store_id}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <span className="text-xs text-warm-gray-400">Dernière synchronisation : —</span>
+        <button
+          onClick={() => onToggle(store)}
+          className="cursor-pointer"
+          aria-label={store.is_active ? "Désactiver la boutique" : "Activer la boutique"}
+        >
+          <Badge variant={store.is_active ? "delivered" : "rejected"}>
+            {store.is_active ? "Actif" : "Inactif"}
+          </Badge>
+        </button>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(store)}>
+          Modifier
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 function AccountsPage() {
   const { toast } = useToast();
-  const [rows, setRows] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<ConvertyAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [addName, setAddName] = useState("");
-  const [addPlatform, setAddPlatform] = useState("converty");
-  const [addCredentials, setAddCredentials] = useState("");
-  const [addErrors, setAddErrors] = useState<{ name?: string; credentials?: string }>({});
-  const [addLoading, setAddLoading] = useState(false);
+  // Add account modal
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [addEmail, setAddEmail] = useState("");
+  const [addPassword, setAddPassword] = useState("");
+  const [addAccountLoading, setAddAccountLoading] = useState(false);
+  const [addAccountErrors, setAddAccountErrors] = useState<{ email?: string; password?: string }>({});
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [editRow, setEditRow] = useState<AccountWithCredentials | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editCredentials, setEditCredentials] = useState("");
-  const [editErrors, setEditErrors] = useState<{ name?: string; credentials?: string }>({});
-  const [editLoading, setEditLoading] = useState(false);
+  // Add store modal
+  const [addStoreOpen, setAddStoreOpen] = useState(false);
+  const [addStoreAccountId, setAddStoreAccountId] = useState<string | null>(null);
+  const [addStoreName, setAddStoreName] = useState("");
+  const [addStoreConvertyId, setAddStoreConvertyId] = useState("");
+  const [addStoreNavexId, setAddStoreNavexId] = useState("");
+  const [addStoreLoading, setAddStoreLoading] = useState(false);
+  const [addStoreErrors, setAddStoreErrors] = useState<{ name?: string; converty_store_id?: string }>({});
+
+  // Edit store modal
+  const [editStoreOpen, setEditStoreOpen] = useState(false);
+  const [editStore, setEditStore] = useState<Store | null>(null);
+  const [editStoreName, setEditStoreName] = useState("");
+  const [editStoreNavexId, setEditStoreNavexId] = useState("");
+  const [editStoreLoading, setEditStoreLoading] = useState(false);
+  const [editStoreErrors, setEditStoreErrors] = useState<{ name?: string }>({});
 
   useEffect(() => {
     setLoading(true);
     void fetch("/api/accounts")
       .then((r) => r.json())
-      .then((data: Account[]) => setRows(data))
+      .then((data: ConvertyAccount[]) => setAccounts(data))
       .catch(() => toast({ title: "Impossible de charger les comptes", variant: "error" }))
       .finally(() => setLoading(false));
   }, [toast]);
 
-  async function patch(id: string, updates: Partial<AccountWithCredentials>) {
-    const res = await fetch("/api/accounts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, ...updates }),
-    });
-    if (!res.ok) {
-      const body = (await res.json()) as { error?: string };
-      throw new Error(body.error ?? "Erreur inconnue");
-    }
-    return (await res.json()) as Account;
-  }
+  // ── Toggle account active ────────────────────────────────────────────────
 
-  const toggleActive = useCallback(async (row: Account) => {
+  const toggleAccount = useCallback(async (account: ConvertyAccount) => {
     try {
-      const updated = await patch(row.id, { is_active: !row.is_active });
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-    } catch (err) {
-      toast({
-        title: "Échec de la mise à jour",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "error",
+      const res = await fetch("/api/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: account.id, is_active: !account.is_active }),
       });
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Erreur inconnue");
+      setAccounts((prev) => prev.map((a) => a.id === account.id ? { ...a, is_active: !a.is_active } : a));
+    } catch (err) {
+      toast({ title: "Échec de la mise à jour", description: err instanceof Error ? err.message : undefined, variant: "error" });
     }
   }, [toast]);
 
-  const openEdit = useCallback((row: Account) => {
-    setEditRow(row);
-    setEditName(row.name);
-    setEditCredentials("");
-    setEditErrors({});
-    setEditOpen(true);
-  }, []);
-
-  const handleTestConnection = useCallback((row: Account) => {
+  const testConnection = useCallback((account: ConvertyAccount) => {
     toast({
       title: "Test de connexion",
-      description: `Synchronisation de "${row.name}" disponible à partir de la session 9.`,
+      description: `Connexion Converty pour "${account.email}" disponible à partir de la session 9.`,
       variant: "info",
     });
   }, [toast]);
 
-  async function handleAdd() {
-    const errs: typeof addErrors = {};
-    if (!addName.trim()) errs.name = "Champ obligatoire";
-    let parsedAddCredentials: Record<string, unknown> | undefined;
-    if (addCredentials.trim()) {
-      try { parsedAddCredentials = JSON.parse(addCredentials) as Record<string, unknown>; }
-      catch { errs.credentials = "JSON invalide"; }
-    }
-    if (Object.keys(errs).length) { setAddErrors(errs); return; }
+  // ── Add account ──────────────────────────────────────────────────────────
 
-    setAddLoading(true);
+  async function handleAddAccount() {
+    const errs: typeof addAccountErrors = {};
+    if (!addEmail.trim()) errs.email = "Champ obligatoire";
+    if (!addPassword.trim()) errs.password = "Champ obligatoire";
+    if (Object.keys(errs).length) { setAddAccountErrors(errs); return; }
+
+    setAddAccountLoading(true);
     try {
-      const credentials = parsedAddCredentials;
       const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: addName.trim(), platform: addPlatform, credentials }),
+        body: JSON.stringify({ email: addEmail.trim(), password_encrypted: addPassword }),
       });
-      if (!res.ok) {
-        const body = (await res.json()) as { error?: string };
-        throw new Error(body.error ?? "Erreur inconnue");
-      }
-      const created = (await res.json()) as Account;
-      setRows((prev) => [...prev, created]);
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Erreur inconnue");
+      const created = (await res.json()) as ConvertyAccount;
+      setAccounts((prev) => [...prev, created]);
       toast({ title: "Compte ajouté", variant: "success" });
-      setAddOpen(false);
-      setAddName("");
-      setAddPlatform("converty");
-      setAddCredentials("");
+      setAddAccountOpen(false);
+      setAddEmail("");
+      setAddPassword("");
     } catch (err) {
-      toast({
-        title: "Échec de l'ajout",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "error",
-      });
+      toast({ title: "Échec de l'ajout", description: err instanceof Error ? err.message : undefined, variant: "error" });
     } finally {
-      setAddLoading(false);
+      setAddAccountLoading(false);
     }
   }
 
-  async function handleEdit() {
-    if (!editRow) return;
-    const errs: typeof editErrors = {};
-    if (!editName.trim()) errs.name = "Champ obligatoire";
-    let parsedEditCredentials: Record<string, unknown> | undefined;
-    if (editCredentials.trim()) {
-      try { parsedEditCredentials = JSON.parse(editCredentials) as Record<string, unknown>; }
-      catch { errs.credentials = "JSON invalide"; }
-    }
-    if (Object.keys(errs).length) { setEditErrors(errs); return; }
+  // ── Add store ────────────────────────────────────────────────────────────
 
-    setEditLoading(true);
+  function openAddStore(accountId: string) {
+    setAddStoreAccountId(accountId);
+    setAddStoreName("");
+    setAddStoreConvertyId("");
+    setAddStoreNavexId("");
+    setAddStoreErrors({});
+    setAddStoreOpen(true);
+  }
+
+  async function handleAddStore() {
+    if (!addStoreAccountId) return;
+    const errs: typeof addStoreErrors = {};
+    if (!addStoreName.trim()) errs.name = "Champ obligatoire";
+    if (!addStoreConvertyId.trim()) errs.converty_store_id = "Champ obligatoire";
+    if (Object.keys(errs).length) { setAddStoreErrors(errs); return; }
+
+    setAddStoreLoading(true);
     try {
-      const credentials = parsedEditCredentials;
-      const updates: Partial<AccountWithCredentials> = { name: editName.trim() };
-      if (credentials !== undefined) updates.credentials = credentials;
-
-      const updated = await patch(editRow.id, updates);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      toast({ title: "Compte mis à jour", variant: "success" });
-      setEditOpen(false);
-    } catch (err) {
-      toast({
-        title: "Échec de la mise à jour",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "error",
+      const res = await fetch("/api/stores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          converty_account_id: addStoreAccountId,
+          converty_store_id: addStoreConvertyId.trim(),
+          name: addStoreName.trim(),
+          navex_account_id: addStoreNavexId.trim() || undefined,
+        }),
       });
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Erreur inconnue");
+      const created = (await res.json()) as Store;
+      setAccounts((prev) =>
+        prev.map((a) => a.id === addStoreAccountId ? { ...a, stores: [...a.stores, created] } : a)
+      );
+      toast({ title: "Boutique ajoutée", variant: "success" });
+      setAddStoreOpen(false);
+    } catch (err) {
+      toast({ title: "Échec de l'ajout", description: err instanceof Error ? err.message : undefined, variant: "error" });
     } finally {
-      setEditLoading(false);
+      setAddStoreLoading(false);
     }
   }
 
-  const columns = useMemo<DataTableColumn<Account>[]>(() => [
-    {
-      id: "name",
-      header: "Nom",
-      accessorKey: "name",
-      sortable: true,
-    },
-    {
-      id: "platform",
-      header: "Plateforme",
-      accessorKey: "platform",
-      sortable: true,
-      cell: (value) => (
-        <span className="capitalize">{value as string}</span>
-      ),
-    },
-    {
-      id: "last_sync",
-      header: "Dernière synchronisation",
-      sortable: false,
-      cell: () => (
-        <span className="text-warm-gray-400">—</span>
-      ),
-    },
-    {
-      id: "is_active",
-      header: "Actif",
-      accessorKey: "is_active",
-      sortable: false,
-      cell: (value, row) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); void toggleActive(row); }}
-          className="cursor-pointer"
-          aria-label={value ? "Désactiver" : "Activer"}
-        >
-          <Badge variant={value ? "delivered" : "rejected"}>
-            {value ? "Actif" : "Inactif"}
-          </Badge>
-        </button>
-      ),
-    },
-    {
-      id: "actions",
-      header: "",
-      sortable: false,
-      cell: (_value, row) => (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); handleTestConnection(row); }}
-          >
-            Tester la connexion
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); openEdit(row); }}
-          >
-            Modifier
-          </Button>
-        </div>
-      ),
-    },
-  ], [toggleActive, openEdit, handleTestConnection]);
+  // ── Toggle store active ──────────────────────────────────────────────────
+
+  const toggleStore = useCallback(async (store: Store) => {
+    try {
+      const res = await fetch("/api/stores", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: store.id, is_active: !store.is_active }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Erreur inconnue");
+      const updated = (await res.json()) as Store;
+      setAccounts((prev) =>
+        prev.map((a) => ({
+          ...a,
+          stores: a.stores.map((s) => s.id === updated.id ? updated : s),
+        }))
+      );
+    } catch (err) {
+      toast({ title: "Échec de la mise à jour", description: err instanceof Error ? err.message : undefined, variant: "error" });
+    }
+  }, [toast]);
+
+  // ── Edit store ───────────────────────────────────────────────────────────
+
+  const openEditStore = useCallback((store: Store) => {
+    setEditStore(store);
+    setEditStoreName(store.name);
+    setEditStoreNavexId(store.navex_account_id ?? "");
+    setEditStoreErrors({});
+    setEditStoreOpen(true);
+  }, []);
+
+  async function handleEditStore() {
+    if (!editStore) return;
+    const errs: typeof editStoreErrors = {};
+    if (!editStoreName.trim()) errs.name = "Champ obligatoire";
+    if (Object.keys(errs).length) { setEditStoreErrors(errs); return; }
+
+    setEditStoreLoading(true);
+    try {
+      const res = await fetch("/api/stores", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editStore.id,
+          name: editStoreName.trim(),
+          navex_account_id: editStoreNavexId.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Erreur inconnue");
+      const updated = (await res.json()) as Store;
+      setAccounts((prev) =>
+        prev.map((a) => ({
+          ...a,
+          stores: a.stores.map((s) => s.id === updated.id ? updated : s),
+        }))
+      );
+      toast({ title: "Boutique mise à jour", variant: "success" });
+      setEditStoreOpen(false);
+    } catch (err) {
+      toast({ title: "Échec de la mise à jour", description: err instanceof Error ? err.message : undefined, variant: "error" });
+    } finally {
+      setEditStoreLoading(false);
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="bg-white shadow-sm rounded-xl p-6 animate-pulse">
+            <div className="h-5 w-48 bg-warm-gray-200 rounded mb-4" />
+            <div className="space-y-2">
+              <div className="h-12 bg-warm-gray-100 rounded-lg" />
+              <div className="h-12 bg-warm-gray-100 rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-navy">Comptes</h1>
-        <Button onClick={() => { setAddErrors({}); setAddOpen(true); }}>
+        <h1 className="text-2xl font-semibold text-navy">Comptes Converty</h1>
+        <Button onClick={() => { setAddAccountErrors({}); setAddAccountOpen(true); }}>
           Ajouter un compte
         </Button>
       </div>
 
-      <Card>
-        <CardContent>
-          <DataTable
-            data={rows}
-            columns={columns}
-            loading={loading}
-            searchable
-            searchPlaceholder="Rechercher un compte…"
-            emptyMessage="Aucun compte configuré"
-          />
-        </CardContent>
-      </Card>
+      {accounts.length === 0 ? (
+        <Card>
+          <CardContent>
+            <p className="text-center text-warm-gray-500 py-8">Aucun compte Converty configuré</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {accounts.map((account) => (
+            <Card key={account.id}>
+              {/* Account header */}
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div>
+                      <CardTitle className="text-base">{maskEmail(account.email)}</CardTitle>
+                      <p className="text-xs text-warm-gray-400 mt-0.5">
+                        Ajouté le {fmtDateMedium(account.created_at)}
+                        {account.auth_token && (
+                          <span className="ml-2 text-emerald">· Token actif</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => testConnection(account)}
+                    >
+                      Tester la connexion
+                    </Button>
+                    <button
+                      onClick={() => void toggleAccount(account)}
+                      className="cursor-pointer"
+                      aria-label={account.is_active ? "Désactiver le compte" : "Activer le compte"}
+                    >
+                      <Badge variant={account.is_active ? "delivered" : "rejected"}>
+                        {account.is_active ? "Actif" : "Inactif"}
+                      </Badge>
+                    </button>
+                  </div>
+                </div>
+              </CardHeader>
 
-      {/* Add modal */}
+              {/* Stores section */}
+              <CardContent>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-warm-gray-600">
+                    Boutiques
+                    <span className="ml-1.5 text-warm-gray-400 font-normal">
+                      ({account.stores.length})
+                    </span>
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openAddStore(account.id)}
+                  >
+                    + Ajouter une boutique
+                  </Button>
+                </div>
+
+                {account.stores.length === 0 ? (
+                  <p className="text-sm text-warm-gray-400 py-2">Aucune boutique configurée</p>
+                ) : (
+                  <div className="space-y-2">
+                    {account.stores.map((store) => (
+                      <StoreRow
+                        key={store.id}
+                        store={store}
+                        onToggle={(s) => void toggleStore(s)}
+                        onEdit={openEditStore}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Add account modal */}
       <Modal
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        title="Nouveau compte"
+        open={addAccountOpen}
+        onOpenChange={setAddAccountOpen}
+        title="Nouveau compte Converty"
         confirmLabel="Ajouter"
-        onConfirm={() => void handleAdd()}
-        loading={addLoading}
+        onConfirm={() => void handleAddAccount()}
+        loading={addAccountLoading}
       >
         <div className="space-y-4">
           <Input
-            label="Nom"
-            value={addName}
-            onChange={(e) => { setAddName(e.target.value); setAddErrors((p) => ({ ...p, name: undefined })); }}
-            error={addErrors.name}
-            placeholder="ex. Boutique principale"
+            label="Adresse e-mail"
+            type="email"
+            value={addEmail}
+            onChange={(e) => { setAddEmail(e.target.value); setAddAccountErrors((p) => ({ ...p, email: undefined })); }}
+            error={addAccountErrors.email}
+            placeholder="email@converty.shop"
           />
-          <Select
-            label="Plateforme"
-            options={PLATFORM_OPTIONS}
-            value={addPlatform}
-            onValueChange={setAddPlatform}
+          <Input
+            label="Mot de passe"
+            type="password"
+            value={addPassword}
+            onChange={(e) => { setAddPassword(e.target.value); setAddAccountErrors((p) => ({ ...p, password: undefined })); }}
+            error={addAccountErrors.password}
+            placeholder="••••••••"
           />
-          <div>
-            <label className="block text-sm font-medium text-navy mb-1.5">
-              Identifiants <span className="text-warm-gray-400 font-normal">(JSON)</span>
-            </label>
-            <textarea
-              value={addCredentials}
-              onChange={(e) => { setAddCredentials(e.target.value); setAddErrors((p) => ({ ...p, credentials: undefined })); }}
-              placeholder={'{"email": "...", "password": "..."}'}
-              rows={4}
-              className="w-full rounded-lg border border-warm-gray-200 bg-white px-3 py-2 text-sm text-navy font-mono focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none transition-colors placeholder:text-warm-gray-400 resize-none"
-            />
-            {addErrors.credentials && (
-              <p className="text-sm text-terracotta mt-1" role="alert">{addErrors.credentials}</p>
-            )}
-          </div>
         </div>
       </Modal>
 
-      {/* Edit modal */}
+      {/* Add store modal */}
       <Modal
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        title="Modifier le compte"
-        description={editRow ? `Plateforme : ${editRow.platform} · Créé le ${formatDate(editRow.created_at)}` : undefined}
-        confirmLabel="Enregistrer"
-        onConfirm={() => void handleEdit()}
-        loading={editLoading}
-        className="max-w-lg"
+        open={addStoreOpen}
+        onOpenChange={setAddStoreOpen}
+        title="Nouvelle boutique"
+        confirmLabel="Ajouter"
+        onConfirm={() => void handleAddStore()}
+        loading={addStoreLoading}
       >
         <div className="space-y-4">
           <Input
-            label="Nom"
-            value={editName}
-            onChange={(e) => { setEditName(e.target.value); setEditErrors((p) => ({ ...p, name: undefined })); }}
-            error={editErrors.name}
+            label="Nom de la boutique"
+            value={addStoreName}
+            onChange={(e) => { setAddStoreName(e.target.value); setAddStoreErrors((p) => ({ ...p, name: undefined })); }}
+            error={addStoreErrors.name}
+            placeholder="ex. Rouleau Magique Store"
           />
-          <div>
-            <label className="block text-sm font-medium text-navy mb-1.5">
-              Identifiants <span className="text-warm-gray-400 font-normal">(JSON — laisser vide pour ne pas modifier)</span>
-            </label>
-            <textarea
-              value={editCredentials}
-              onChange={(e) => { setEditCredentials(e.target.value); setEditErrors((p) => ({ ...p, credentials: undefined })); }}
-              placeholder={'{"email": "...", "password": "..."}'}
-              rows={4}
-              className="w-full rounded-lg border border-warm-gray-200 bg-white px-3 py-2 text-sm text-navy font-mono focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none transition-colors placeholder:text-warm-gray-400 resize-none"
-            />
-            {editErrors.credentials && (
-              <p className="text-sm text-terracotta mt-1" role="alert">{editErrors.credentials}</p>
-            )}
-          </div>
+          <Input
+            label="ID Converty de la boutique"
+            value={addStoreConvertyId}
+            onChange={(e) => { setAddStoreConvertyId(e.target.value); setAddStoreErrors((p) => ({ ...p, converty_store_id: undefined })); }}
+            error={addStoreErrors.converty_store_id}
+            placeholder="ex. 67a8b2c3d4e5f6a7b8c9d0e1"
+          />
+          <Input
+            label="ID compte Navex"
+            value={addStoreNavexId}
+            onChange={(e) => setAddStoreNavexId(e.target.value)}
+            placeholder="Optionnel"
+          />
+        </div>
+      </Modal>
+
+      {/* Edit store modal */}
+      <Modal
+        open={editStoreOpen}
+        onOpenChange={setEditStoreOpen}
+        title="Modifier la boutique"
+        description={editStore ? `ID Converty : ${editStore.converty_store_id}` : undefined}
+        confirmLabel="Enregistrer"
+        onConfirm={() => void handleEditStore()}
+        loading={editStoreLoading}
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nom de la boutique"
+            value={editStoreName}
+            onChange={(e) => { setEditStoreName(e.target.value); setEditStoreErrors((p) => ({ ...p, name: undefined })); }}
+            error={editStoreErrors.name}
+          />
+          <Input
+            label="ID compte Navex"
+            value={editStoreNavexId}
+            onChange={(e) => setEditStoreNavexId(e.target.value)}
+            placeholder="Laisser vide pour supprimer"
+          />
         </div>
       </Modal>
     </div>

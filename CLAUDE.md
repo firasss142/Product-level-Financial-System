@@ -24,7 +24,7 @@ src/
   lib/
     calculations/   → ALL financial logic — server-side ONLY, never duplicate on client
     supabase/       → DB client + typed queries
-    sync/           → Converty scraping engine
+    sync/           → Converty REST API sync engine (NOT scraping)
     settings/       → Settings reader/writer
     campaigns/      → Ad platform integration
   types/            → Shared TypeScript types
