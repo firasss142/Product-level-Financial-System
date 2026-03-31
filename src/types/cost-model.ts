@@ -120,6 +120,78 @@ export interface NetProfit {
 }
 
 // ---------------------------------------------------------------------------
+// Computation inputs — typed API between caller and engine
+// ---------------------------------------------------------------------------
+
+/** Full input bundle required to compute Layer 1 contribution margin */
+export interface ContributionMarginInput {
+  productId: string;
+  period: Period;
+  /** Pre-aggregated order buckets for this product + period */
+  aggregates: ProductOrderAggregates;
+  /** Campaign spend for this product + period */
+  campaignSpend: CampaignSpendAggregate;
+  /** All cost variables from DB settings — never hardcode */
+  settings: {
+    navex_delivery_fee: number;
+    navex_return_fee: number;
+    converty_platform_fee_rate: number;
+    packing_cost: number;
+  };
+}
+
+/** Full output of a Layer 1 contribution margin computation (snake_case API variant) */
+export interface ContributionMarginOutput {
+  product_id: string;
+  product_name: string;
+  period: Period;
+
+  revenue: number;
+  delivered_count: number;
+
+  total_cogs: number;
+  total_delivery_fee: number;
+  total_packing_cost: number;
+  total_converty_fee_on_delivered: number;
+  ad_spend_allocation: number;
+  return_cost_burden: number;
+  failed_lead_cost_burden: number;
+  exchange_cost_burden: number;
+  total_direct_costs: number;
+  contribution_margin_total: number;
+
+  /** null when delivered_count = 0 */
+  contribution_margin_per_order: number | null;
+  /** null when delivered_count = 0 */
+  per_order: {
+    revenue: number;
+    cogs: number;
+    delivery_fee: number;
+    packing_cost: number;
+    converty_fee: number;
+    ad_spend: number;
+    return_burden: number;
+    failed_lead_burden: number;
+    exchange_burden: number;
+    total_cost: number;
+    margin: number;
+  } | null;
+}
+
+/** Full input bundle required to compute Layer 2 net profit */
+export interface NetProfitInput {
+  period: Period;
+  /** Layer 1 outputs for all active products */
+  productMargins: ContributionMargin[];
+  /** Monthly overhead lines from overhead_categories table */
+  overheadCategories: OverheadLine[];
+  /** navex_daily_pickup_fee from settings */
+  dailyPickupFee: number;
+  /** Number of working days in the period (for pickup fee calculation) */
+  workingDays: number;
+}
+
+// ---------------------------------------------------------------------------
 // Cost waterfall (for visualization)
 // ---------------------------------------------------------------------------
 

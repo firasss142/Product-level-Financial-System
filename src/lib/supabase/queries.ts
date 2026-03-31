@@ -1,0 +1,265 @@
+// ---------------------------------------------------------------------------
+// Typed Supabase query helpers — return domain types, not raw DB rows.
+// Server-side only.
+// ---------------------------------------------------------------------------
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ProductSummary, ProductWithCosts, CostComponent, ProductBatch } from "@/types/product";
+import type { Investor, InvestmentDeal, Settlement } from "@/types/investor";
+import type { OrderRow } from "@/types/orders";
+import type { Period } from "@/types/cost-model";
+import type { SettingsKey } from "@/lib/settings";
+import type { Settings } from "@/lib/settings";
+
+// ---------------------------------------------------------------------------
+// Products
+// ---------------------------------------------------------------------------
+
+/** Fetch all active products with their account name (for lists / selectors) */
+export async function queryActiveProducts(
+  supabase: SupabaseClient
+): Promise<ProductSummary[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, account_id, unit_cogs, is_active, created_at, accounts(name)")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((p) => ({
+    id: p.id as string,
+    name: p.name as string,
+    account_id: p.account_id as string,
+    account_name: (p.accounts as unknown as { name: string } | null)?.name ?? null,
+    unit_cogs: p.unit_cogs as number | null,
+    is_active: p.is_active as boolean,
+    created_at: p.created_at as string,
+  }));
+}
+
+/** Fetch a single product with all cost components and batch history */
+export async function queryProductWithCosts(
+  supabase: SupabaseClient,
+  productId: string
+): Promise<ProductWithCosts | null> {
+  const [productResult, componentsResult, batchesResult] = await Promise.all([
+    supabase
+      .from("products")
+      .select("id, name, account_id, unit_cogs, is_active, created_at, updated_at")
+      .eq("id", productId)
+      .single(),
+    supabase
+      .from("product_cost_components")
+      .select("id, product_id, label, amount, is_default, sort_order")
+      .eq("product_id", productId)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("product_batches")
+      .select("id, product_id, batch_number, quantity, unit_cost, cost_breakdown, supplier, notes, created_at")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (productResult.error) {
+    if (productResult.error.code === "PGRST116") return null;
+    throw new Error(productResult.error.message);
+  }
+  if (componentsResult.error) throw new Error(componentsResult.error.message);
+  if (batchesResult.error) throw new Error(batchesResult.error.message);
+
+  const p = productResult.data;
+
+  const cost_components: CostComponent[] = (componentsResult.data ?? []).map((c) => ({
+    id: c.id as string,
+    product_id: c.product_id as string,
+    label: c.label as string,
+    amount: Number(c.amount),
+    is_default: c.is_default as boolean,
+    sort_order: c.sort_order as number,
+  }));
+
+  const batches: ProductBatch[] = (batchesResult.data ?? []).map((b) => ({
+    id: b.id as string,
+    product_id: b.product_id as string,
+    batch_number: b.batch_number as string,
+    quantity: b.quantity as number,
+    unit_cost: Number(b.unit_cost),
+    cost_breakdown: (b.cost_breakdown ?? []) as Array<{ label: string; amount: number }>,
+    supplier: (b.supplier as string | null) ?? null,
+    notes: (b.notes as string | null) ?? null,
+    created_at: b.created_at as string,
+  }));
+
+  return {
+    id: p.id as string,
+    account_id: p.account_id as string,
+    name: p.name as string,
+    unit_cogs: Number(p.unit_cogs ?? 0),
+    is_active: p.is_active as boolean,
+    created_at: p.created_at as string,
+    updated_at: p.updated_at as string,
+    cost_components,
+    batches,
+    active_batch: batches[0],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+/** Fetch all settings as a typed Settings object */
+export async function querySettings(supabase: SupabaseClient): Promise<Settings> {
+  const { data, error } = await supabase
+    .from("settings")
+    .select("key, value");
+
+  if (error) throw new Error(error.message);
+
+  const map = Object.fromEntries((data ?? []).map((r) => [r.key as SettingsKey, Number(r.value)]));
+
+  return {
+    navex_delivery_fee: map.navex_delivery_fee ?? 0,
+    navex_return_fee: map.navex_return_fee ?? 0,
+    navex_daily_pickup_fee: map.navex_daily_pickup_fee ?? 0,
+    converty_platform_fee_rate: map.converty_platform_fee_rate ?? 0,
+    packing_cost: map.packing_cost ?? 0,
+  };
+}
+
+/** Fetch a single setting value by key */
+export async function querySettingByKey(
+  supabase: SupabaseClient,
+  key: SettingsKey
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", key)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return Number(data.value);
+}
+
+// ---------------------------------------------------------------------------
+// Orders (calculation-safe: excludes duplicated + test)
+// ---------------------------------------------------------------------------
+
+/** Fetch filtered orders for profitability calculations */
+export async function queryOrdersForPeriod(
+  supabase: SupabaseClient,
+  period: Period,
+  options: { productId?: string; accountId?: string } = {}
+): Promise<OrderRow[]> {
+  let query = supabase
+    .from("orders")
+    .select(
+      "id, account_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at"
+    )
+    .eq("is_duplicated", false)
+    .eq("is_test", false)
+    .gte("converty_created_at", period.start.toISOString())
+    .lte("converty_created_at", period.end.toISOString());
+
+  if (options.productId) {
+    query = query.eq("product_id", options.productId);
+  }
+  if (options.accountId) {
+    query = query.eq("account_id", options.accountId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as OrderRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Investors
+// ---------------------------------------------------------------------------
+
+/** Fetch all active investors */
+export async function queryActiveInvestors(
+  supabase: SupabaseClient
+): Promise<Investor[]> {
+  const { data, error } = await supabase
+    .from("investors")
+    .select("id, name, email, phone, notes, is_active, created_at, updated_at")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((i) => ({
+    id: i.id as string,
+    name: i.name as string,
+    email: (i.email as string | null) ?? null,
+    phone: (i.phone as string | null) ?? null,
+    notes: (i.notes as string | null) ?? null,
+    is_active: i.is_active as boolean,
+    created_at: i.created_at as string,
+    updated_at: i.updated_at as string,
+  }));
+}
+
+/** Fetch all active deals for an investor */
+export async function queryDealsByInvestor(
+  supabase: SupabaseClient,
+  investorId: string
+): Promise<InvestmentDeal[]> {
+  const { data, error } = await supabase
+    .from("investment_deals")
+    .select(
+      "id, investor_id, scope_type, scope_id, capital_amount, profit_share_rate, loss_share_rate, start_date, end_date, is_active, notes, created_at, updated_at"
+    )
+    .eq("investor_id", investorId)
+    .order("start_date", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((d) => ({
+    id: d.id as string,
+    investor_id: d.investor_id as string,
+    scope_type: d.scope_type as InvestmentDeal["scope_type"],
+    scope_id: (d.scope_id as string | null) ?? null,
+    capital_amount: Number(d.capital_amount),
+    profit_share_rate: Number(d.profit_share_rate),
+    loss_share_rate: Number(d.loss_share_rate),
+    start_date: d.start_date as string,
+    end_date: (d.end_date as string | null) ?? null,
+    is_active: d.is_active as boolean,
+    notes: (d.notes as string | null) ?? null,
+    created_at: d.created_at as string,
+    updated_at: d.updated_at as string,
+  }));
+}
+
+/** Fetch all settlements for a deal, ordered newest first */
+export async function querySettlementsByDeal(
+  supabase: SupabaseClient,
+  dealId: string
+): Promise<Settlement[]> {
+  const { data, error } = await supabase
+    .from("settlements")
+    .select(
+      "id, deal_id, period_start, period_end, snapshot, total_revenue, total_costs, net_profit, investor_share, created_at"
+    )
+    .eq("deal_id", dealId)
+    .order("period_start", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((s) => ({
+    id: s.id as string,
+    deal_id: s.deal_id as string,
+    period_start: s.period_start as string,
+    period_end: s.period_end as string,
+    snapshot: s.snapshot as Settlement["snapshot"],
+    total_revenue: Number(s.total_revenue),
+    total_costs: Number(s.total_costs),
+    net_profit: Number(s.net_profit),
+    investor_share: Number(s.investor_share),
+    created_at: s.created_at as string,
+  }));
+}

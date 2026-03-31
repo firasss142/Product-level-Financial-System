@@ -8,7 +8,15 @@ export interface Settings {
   packing_cost: number;
 }
 
-export type SettingKey = keyof Settings;
+/**
+ * Type-safe union of all valid setting keys stored in the settings table.
+ * Named SettingsKey (plural) to match the Settings interface convention.
+ * Adding a new field to Settings automatically widens this union.
+ */
+export type SettingsKey = keyof Settings;
+
+/** @deprecated Use SettingsKey — kept for backward compatibility */
+export type SettingKey = SettingsKey;
 
 export async function getSettings(): Promise<Settings> {
   const supabase = await createClient();

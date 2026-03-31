@@ -81,6 +81,23 @@ export function isFailedLeadStatus(s: string): s is FailedLeadStatus {
   return _failedLeadSet.has(s);
 }
 
+// --- Order flags -----------------------------------------------------------
+
+/** Boolean flags on an order that control calculation inclusion */
+export interface OrderFlags {
+  is_duplicated: boolean;
+  is_exchange: boolean;
+  is_test: boolean;
+  /** refunded API field is broken — present for completeness, NEVER used in calculations */
+  is_refunded: boolean;
+}
+
+/**
+ * Alias for NavexZoneStatus — statuses at or beyond "deposit" where Navex costs begin.
+ * Use this name when emphasizing the cost-boundary meaning rather than zone membership.
+ */
+export type NavexCostStatus = NavexZoneStatus;
+
 // --- Cart types ------------------------------------------------------------
 
 export interface CartItem {
