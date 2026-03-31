@@ -1,26 +1,65 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #FAFAF8;
+  --foreground: #1B2A4A;
 }
 
 @theme inline {
+  /* Brand colors */
+  --color-navy: #1B2A4A;
+  --color-navy-light: #2A3F6B;
+  --color-navy-dark: #111C33;
+  --color-emerald: #2D8F5C;
+  --color-emerald-light: #3AAF72;
+  --color-emerald-dark: #1F6B42;
+  --color-terracotta: #C75B39;
+  --color-terracotta-light: #D97B5F;
+  --color-terracotta-dark: #A04629;
+  --color-amber: #D4A843;
+  --color-amber-light: #E0BF6B;
+  --color-amber-dark: #B08C2E;
+
+  /* Warm gray scale */
+  --color-warm-gray-50: #FAF9F7;
+  --color-warm-gray-100: #F5F3EF;
+  --color-warm-gray-200: #E8E4DE;
+  --color-warm-gray-300: #D4CFC6;
+  --color-warm-gray-400: #B5AFA5;
+  --color-warm-gray-500: #8C857B;
+  --color-warm-gray-600: #6B6560;
+  --color-warm-gray-700: #4A4540;
+  --color-warm-gray-800: #2E2A26;
+  --color-warm-gray-900: #1A1714;
+
+  /* Semantic colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-card: #FFFFFF;
+  --color-border: #E8E4DE;
+  --color-ring: #1B2A4A;
+  --color-error: #C75B39;
+  --color-success: #2D8F5C;
+  --color-warning: #D4A843;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Font */
+  --font-sans: "IBM Plex Sans", sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
