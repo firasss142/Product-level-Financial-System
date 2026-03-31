@@ -88,9 +88,9 @@ This is the metric that answers: 'Should I keep selling this product?' It includ
 
 - **Ad Spend Allocation** = total campaign spend for product ÷ number of delivered orders for that product in the period
 
-- **Return Cost Burden** = (total return fees for product + delivery fees on returned orders) ÷ number of delivered orders
+- **Return Cost Burden** = (total return fees + packing costs on returned orders + Converty fees on returned orders) ÷ number of delivered orders
 
-- **Failed Lead Cost Burden** = total Converty fees on non-delivered orders (rejected, abandoned, pending) ÷ number of delivered orders
+- **Failed Lead Cost Burden** = total Converty fees on failed lead orders (rejected, abandoned, pending only — NOT returned) ÷ number of delivered orders
 
 - **Exchange Cost Burden** = total delivery fees on exchange orders ÷ number of delivered orders
 
@@ -98,11 +98,13 @@ This is the metric that answers: 'Should I keep selling this product?' It includ
 
 ### **Key Insight: Return Cost Burden**
 
-Returns don't just cost the return fee — they also waste the delivery fee that was paid when the package was picked up. Both costs must be distributed across delivered orders because returned orders generate zero revenue. This is why return rate is the single most important KPI in COD. A product with 50% return rate effectively doubles the delivery cost per successful order.
+Returns cost the return fee, consume packing material (non-recoverable), and trigger a non-recoverable Converty platform fee. All three are distributed across delivered orders because returned orders generate zero revenue. This is why return rate is the single most important KPI in COD.
+
+Note: the delivery fee paid when a returned package was picked up is negligible at scale (it is already absorbed by the business-level Navex daily pickup lump sum) and is excluded from the per-order return burden calculation.
 
 ### **COGS for Returned Orders**
 
-Returned products go back into inventory and are resellable (unless damaged). Therefore, COGS is NOT counted as a loss on returned orders — only delivery and return fees are lost. The system should maintain a simple 'damaged returns count' per product to track inventory shrinkage, but this is not factored into per-order profitability.
+Returned products go back into inventory and are resellable (unless damaged). Therefore, COGS is NOT counted as a loss on returned orders — only the return fee and packing cost are lost. The system should maintain a simple 'damaged returns count' per product to track inventory shrinkage, but this is not factored into per-order profitability.
 
 ## **2.3 Layer 2: Net Profit (Business Level)**
 
@@ -127,7 +129,7 @@ This table shows exactly which costs apply based on an order's final status. Thi
 | **Final Status** | **Converty 0.3%** | **COGS** | **Delivery Fee** | **Return Fee** | **Packing** | **Ad Spend Share** | **Revenue** |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | delivered | Yes | Yes | Yes | No | Yes | Yes | Yes (totalPrice) |
-| returned / to_be_returned | Yes | No (back in inventory) | Yes (wasted) | Yes | Yes (wasted) | Burden on delivered | No |
+| returned / to_be_returned | Yes (in return burden) | No (back in inventory) | No (excluded — negligible, absorbed by pickup lump sum) | Yes (in return burden) | Yes (in return burden) | Burden on delivered | No |
 | rejected | Yes | No | No | No | No | Burden on delivered | No |
 | abandoned | Yes | No | No | No | No | Burden on delivered | No |
 | pending (stuck) | Yes | No | No | No | No | Burden on delivered | No |
