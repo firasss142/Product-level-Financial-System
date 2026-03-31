@@ -15,9 +15,6 @@ export interface Settings {
  */
 export type SettingsKey = keyof Settings;
 
-/** @deprecated Use SettingsKey — kept for backward compatibility */
-export type SettingKey = SettingsKey;
-
 export async function getSettings(): Promise<Settings> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -37,7 +34,7 @@ export async function getSettings(): Promise<Settings> {
   };
 }
 
-export async function getSetting(key: SettingKey): Promise<number> {
+export async function getSetting(key: SettingsKey): Promise<number> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("settings")

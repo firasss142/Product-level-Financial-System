@@ -1,14 +1,6 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { getSettings, saveSettings } from "@/lib/settings";
-
-const SettingsSchema = z.object({
-  navex_delivery_fee: z.number().positive(),
-  navex_return_fee: z.number().positive(),
-  navex_daily_pickup_fee: z.number().positive(),
-  converty_platform_fee_rate: z.number().positive(),
-  packing_cost: z.number().positive(),
-});
+import { SettingsWriteSchema } from "@/lib/supabase/schemas";
 
 export async function GET() {
   try {
@@ -23,7 +15,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body: unknown = await request.json();
-    const parsed = SettingsSchema.safeParse(body);
+    const parsed = SettingsWriteSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(

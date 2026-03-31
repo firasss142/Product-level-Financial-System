@@ -1,18 +1,6 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-
-const ComponentSchema = z.object({
-  id: z.string().uuid().optional(),
-  label: z.string().min(1),
-  amount: z.number().min(0),
-  is_default: z.boolean(),
-  sort_order: z.number().int().optional(),
-});
-
-const SaveSchema = z.object({
-  components: z.array(ComponentSchema),
-});
+import { ComponentsSaveSchema } from "@/lib/supabase/schemas";
 
 export async function POST(
   request: Request,
@@ -21,7 +9,7 @@ export async function POST(
   try {
     const { id: productId } = await params;
     const body: unknown = await request.json();
-    const parsed = SaveSchema.safeParse(body);
+    const parsed = ComponentsSaveSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -32,7 +20,6 @@ export async function POST(
 
     const supabase = await createClient();
 
-    // Verify product exists
     const { error: productError } = await supabase
       .from("products")
       .select("id")
@@ -44,7 +31,6 @@ export async function POST(
 
     const { components } = parsed.data;
 
-    // Get existing components to know which custom ones to delete
     const { data: existing } = await supabase
       .from("product_cost_components")
       .select("id, is_default")
@@ -62,7 +48,6 @@ export async function POST(
         .in("id", toDelete);
     }
 
-    // Upsert all components
     const upsertData = components.map((c, idx) => ({
       ...(c.id ? { id: c.id } : {}),
       product_id: productId,
@@ -80,7 +65,6 @@ export async function POST(
 
     if (upsertError) throw new Error(upsertError.message);
 
-    // Recompute total and update unit_cogs
     const total = components.reduce((sum, c) => sum + c.amount, 0);
     const { error: updateError } = await supabase
       .from("products")

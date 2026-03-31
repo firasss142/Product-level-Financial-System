@@ -13,7 +13,7 @@ export async function GET(
       supabase
         .from("orders")
         .select(
-          "id, reference, status, total_price, is_duplicated, is_exchange, is_test, product_id, account_id, cart, customer_data, converty_created_at, products(id, name), accounts(id, name)"
+          "id, reference, status, total_price, is_duplicated, is_exchange, is_test, product_id, store_id, converty_order_id, selected_variant_id, selected_variant_sku, variant_unit_count, cart, customer_data, converty_created_at, products(id, name), stores(name)"
         )
         .eq("id", id)
         .single(),
@@ -42,8 +42,12 @@ export async function GET(
       is_test: o.is_test,
       product_id: o.product_id,
       product_name: (o.products as unknown as { id: string; name: string } | null)?.name ?? null,
-      account_id: o.account_id,
-      account_name: (o.accounts as unknown as { id: string; name: string } | null)?.name ?? null,
+      store_id: o.store_id,
+      store_name: (o.stores as unknown as { name: string } | null)?.name ?? null,
+      converty_order_id: o.converty_order_id,
+      selected_variant_id: o.selected_variant_id,
+      selected_variant_sku: o.selected_variant_sku,
+      variant_unit_count: o.variant_unit_count,
       cart: o.cart,
       customer_data: o.customer_data,
       converty_created_at: o.converty_created_at,

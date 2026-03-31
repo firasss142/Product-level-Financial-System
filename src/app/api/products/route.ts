@@ -1,20 +1,6 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-
-const CreateSchema = z.object({
-  name: z.string().min(1),
-  store_id: z.string().uuid(),
-});
-
-const UpdateSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1).optional(),
-  store_id: z.string().uuid().optional(),
-  is_active: z.boolean().optional(),
-  converty_product_id: z.string().nullable().optional(),
-  variant_quantity_map: z.record(z.string(), z.number().int().positive()).optional(),
-});
+import { ProductCreateSchema, ProductUpdateSchema } from "@/lib/supabase/schemas";
 
 const DEFAULT_COMPONENTS = [
   { label: "Prix d'achat fournisseur", is_default: true, sort_order: 1 },
@@ -60,7 +46,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body: unknown = await request.json();
-    const parsed = CreateSchema.safeParse(body);
+    const parsed = ProductCreateSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -96,7 +82,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body: unknown = await request.json();
-    const parsed = UpdateSchema.safeParse(body);
+    const parsed = ProductUpdateSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
