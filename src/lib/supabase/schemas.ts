@@ -274,6 +274,7 @@ export type SettlementCreateInput = z.infer<typeof SettlementCreateSchema>;
 export const DailySettlementUpsertSchema = z.object({
   date: DateStringSchema,
   actual_amount: z.number().nonnegative(),
+  expected_amount: z.number().optional(),
   notes: z.string().optional(),
 });
 

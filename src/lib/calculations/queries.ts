@@ -278,3 +278,69 @@ export async function fetchDailySettlements(
   if (error) throw new Error(error.message);
   return (data ?? []) as DailySettlementRow[];
 }
+
+// ---------------------------------------------------------------------------
+// Reconciliation — order status history joined with orders for a full month
+// ---------------------------------------------------------------------------
+
+export interface StatusHistoryWithOrder {
+  /** order_status_history.id */
+  history_id: string;
+  order_id: string;
+  reference: string;
+  status: string;
+  /** ISO timestamp when this status change occurred in Converty */
+  changed_at: string;
+  total_price: number;
+  is_duplicated: boolean;
+  is_test: boolean;
+}
+
+/**
+ * Fetch all order_status_history rows for a calendar month, joined with their
+ * parent orders. Excludes duplicated and test orders at the query level.
+ * Used to compute per-day expected Navex settlement amounts.
+ */
+export async function fetchOrderStatusHistoryForMonth(
+  supabase: SupabaseClient,
+  year: number,
+  month: number // 1-based
+): Promise<StatusHistoryWithOrder[]> {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 1); // first day of next month (exclusive)
+  const startStr = start.toISOString().slice(0, 10);
+  const endStr = end.toISOString().slice(0, 10);
+
+  // Fetch history rows within the month, joining orders for flags + price
+  const { data, error } = await supabase
+    .from("order_status_history")
+    .select(
+      "id, order_id, status, changed_at, orders!inner(reference, total_price, is_duplicated, is_test)"
+    )
+    .gte("changed_at", `${startStr}T00:00:00.000Z`)
+    .lt("changed_at", `${endStr}T00:00:00.000Z`)
+    .order("changed_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .map((row) => {
+      const order = row.orders as unknown as {
+        reference: string;
+        total_price: number | null;
+        is_duplicated: boolean;
+        is_test: boolean;
+      };
+      return {
+        history_id: row.id as string,
+        order_id: row.order_id as string,
+        reference: order.reference,
+        status: row.status as string,
+        changed_at: row.changed_at as string,
+        total_price: Number(order.total_price ?? 0),
+        is_duplicated: order.is_duplicated,
+        is_test: order.is_test,
+      };
+    })
+    .filter((r) => !r.is_duplicated && !r.is_test);
+}
