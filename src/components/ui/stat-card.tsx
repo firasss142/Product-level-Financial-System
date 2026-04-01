@@ -10,6 +10,7 @@ interface StatCardProps {
   };
   prefix?: string;
   suffix?: string;
+  valueClassName?: string;
   className?: string;
 }
 
@@ -25,6 +26,7 @@ function StatCard({
   trend,
   prefix,
   suffix,
+  valueClassName,
   className,
 }: StatCardProps) {
   return (
@@ -33,7 +35,7 @@ function StatCard({
         {prefix && (
           <span className="text-xl font-medium text-navy">{prefix}</span>
         )}
-        <span className="text-3xl font-semibold text-navy tabular-nums">
+        <span className={cn("text-3xl font-semibold tabular-nums", valueClassName ?? "text-navy")}>
           {value}
         </span>
         {suffix && (

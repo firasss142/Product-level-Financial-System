@@ -6,7 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProductSummary, ProductWithCosts, CostComponent, ProductBatch } from "@/types/product";
 import type { Investor, InvestmentDeal, Settlement } from "@/types/investor";
-import type { OrderRow } from "@/types/orders";
+import { TERMINAL_STATUSES, type OrderRow } from "@/types/orders";
 import type { Period } from "@/types/cost-model";
 import type { SettingsKey } from "@/lib/settings";
 import type { Settings } from "@/lib/settings";
@@ -176,6 +176,48 @@ export async function queryOrdersForPeriod(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as OrderRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Stuck orders (dashboard alerts)
+// ---------------------------------------------------------------------------
+
+export interface StuckOrderRow {
+  id: string;
+  reference: string;
+  status: string;
+  product_name: string | null;
+  converty_created_at: string;
+  hours_stuck: number;
+}
+
+/** Fetch non-terminal orders older than 48 hours (stuck in pipeline) */
+export async function fetchStuckOrders(
+  supabase: SupabaseClient
+): Promise<StuckOrderRow[]> {
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, reference, status, converty_created_at, products(name)")
+    .eq("is_duplicated", false)
+    .eq("is_test", false)
+    .not("status", "in", `(${TERMINAL_STATUSES.map((s) => `"${s}"`).join(",")})`)
+    .lt("converty_created_at", cutoff)
+    .order("converty_created_at", { ascending: true })
+    .limit(100);
+
+  if (error) throw new Error(error.message);
+
+  const now = Date.now();
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    reference: row.reference as string,
+    status: row.status as string,
+    product_name: (row.products as unknown as { name: string } | null)?.name ?? null,
+    converty_created_at: row.converty_created_at as string,
+    hours_stuck: Math.round((now - new Date(row.converty_created_at as string).getTime()) / (1000 * 60 * 60)),
+  }));
 }
 
 // ---------------------------------------------------------------------------

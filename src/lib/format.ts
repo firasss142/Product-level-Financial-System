@@ -21,6 +21,11 @@ export function fmtPrice(value: number | null): string {
   return NUMBER_FMT.format(value);
 }
 
+export function fmtPercent(rate: number | null): string {
+  if (rate === null) return "—";
+  return NUMBER_FMT.format(rate * 100);
+}
+
 export function fmtDateShort(iso: string): string {
   return DATE_FMT_SHORT.format(new Date(iso));
 }
