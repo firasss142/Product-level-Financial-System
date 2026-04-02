@@ -9,6 +9,7 @@ import type {
   Period,
   ProductOrderAggregates,
   CampaignSpendAggregate,
+  SpendAllocation,
   OverheadLine,
 } from "@/types/cost-model";
 import {
@@ -166,7 +167,9 @@ export function aggregateProductOrders(
 
 /**
  * Fetch campaign spend for a product where the campaign period overlaps
- * the query period (no pro-rating in v1 — full spend if any overlap).
+ * the query period. Handles mixed campaigns via spend_allocations JSONB:
+ * - NULL allocations: 1:1 mapping — full spend goes to campaign.product_id
+ * - Non-null allocations: proportional split by percentage to each listed product
  */
 export async function fetchCampaignSpend(
   supabase: SupabaseClient,
@@ -176,26 +179,40 @@ export async function fetchCampaignSpend(
   const startStr = period.start.toISOString().slice(0, 10);
   const endStr = period.end.toISOString().slice(0, 10);
 
+  // Fetch all campaigns in period — no product_id filter, because a mixed campaign
+  // may have product_id = "product B" but allocate spend to "product A" via spend_allocations
   const { data, error } = await supabase
     .from("campaigns")
-    .select("spend, leads")
-    .eq("product_id", productId)
+    .select("product_id, spend, leads, spend_allocations")
     .lte("period_start", endStr)
     .gte("period_end", startStr);
 
   if (error) throw new Error(error.message);
 
-  const rows = data ?? [];
-  return {
-    productId,
-    totalSpend: rows.reduce((s, r) => s + (r.spend ?? 0), 0),
-    totalLeads: rows.reduce((s, r) => s + (r.leads ?? 0), 0),
-  };
+  let totalSpend = 0;
+  let totalLeads = 0;
+  for (const row of data ?? []) {
+    const allocs = row.spend_allocations as SpendAllocation[] | null;
+    if (!allocs) {
+      if (row.product_id === productId) {
+        totalSpend += row.spend ?? 0;
+        totalLeads += row.leads ?? 0;
+      }
+    } else {
+      const entry = allocs.find((a) => a.product_id === productId);
+      if (entry) {
+        totalSpend += (row.spend ?? 0) * (entry.percentage / 100);
+        totalLeads += (row.leads ?? 0) * (entry.percentage / 100);
+      }
+    }
+  }
+  return { productId, totalSpend, totalLeads };
 }
 
 /**
  * Fetch campaign spend for all products in a single query.
  * Returns a Map keyed by product_id — missing products default to zero spend.
+ * Handles mixed campaigns via spend_allocations proportional split.
  */
 export async function fetchAllCampaignSpends(
   supabase: SupabaseClient,
@@ -206,19 +223,31 @@ export async function fetchAllCampaignSpends(
 
   const { data, error } = await supabase
     .from("campaigns")
-    .select("product_id, spend, leads")
+    .select("product_id, spend, leads, spend_allocations")
     .lte("period_start", endStr)
     .gte("period_end", startStr);
 
   if (error) throw new Error(error.message);
 
   const result = new Map<string, CampaignSpendAggregate>();
+  const getOrCreate = (pid: string): CampaignSpendAggregate => {
+    if (!result.has(pid)) result.set(pid, { productId: pid, totalSpend: 0, totalLeads: 0 });
+    return result.get(pid)!;
+  };
+
   for (const row of data ?? []) {
-    const pid = row.product_id as string;
-    const existing = result.get(pid) ?? { productId: pid, totalSpend: 0, totalLeads: 0 };
-    existing.totalSpend += row.spend ?? 0;
-    existing.totalLeads += row.leads ?? 0;
-    result.set(pid, existing);
+    const allocs = row.spend_allocations as SpendAllocation[] | null;
+    if (!allocs) {
+      const agg = getOrCreate(row.product_id as string);
+      agg.totalSpend += row.spend ?? 0;
+      agg.totalLeads += row.leads ?? 0;
+    } else {
+      for (const entry of allocs) {
+        const agg = getOrCreate(entry.product_id);
+        agg.totalSpend += (row.spend ?? 0) * (entry.percentage / 100);
+        agg.totalLeads += (row.leads ?? 0) * (entry.percentage / 100);
+      }
+    }
   }
   return result;
 }

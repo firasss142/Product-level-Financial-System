@@ -281,3 +281,56 @@ export const DailySettlementUpsertSchema = z.object({
 export type DailySettlementUpsertInput = z.infer<
   typeof DailySettlementUpsertSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Campaigns — GET /api/campaigns, POST /api/campaigns, PATCH /api/campaigns/[id]
+// ---------------------------------------------------------------------------
+
+export const SpendAllocationSchema = z.object({
+  product_id: UuidSchema,
+  percentage: z.number().min(0).max(100),
+});
+
+export const SpendAllocationsSchema = z
+  .array(SpendAllocationSchema)
+  .min(2)
+  .refine(
+    (arr) => Math.abs(arr.reduce((s, a) => s + a.percentage, 0) - 100) < 0.01,
+    { message: "Les pourcentages doivent totaliser 100" }
+  );
+
+export const CampaignCreateSchema = z.object({
+  product_id: UuidSchema,
+  platform: z.string().min(1),
+  campaign_name: z.string().nullable().optional(),
+  campaign_id: z.string().nullable().optional(),
+  spend: z.number().nonnegative(),
+  leads: z.number().int().nonnegative(),
+  impressions: z.number().int().nonnegative(),
+  clicks: z.number().int().nonnegative(),
+  period_start: DateStringSchema,
+  period_end: DateStringSchema,
+  spend_allocations: SpendAllocationsSchema.nullable().optional(),
+});
+
+export const CampaignUpdateSchema = z.object({
+  product_id: UuidSchema.optional(),
+  spend_allocations: SpendAllocationsSchema.nullable().optional(),
+  campaign_name: z.string().nullable().optional(),
+});
+
+export const CampaignsQuerySchema = z.object({
+  period_start: DateStringSchema,
+  period_end: DateStringSchema,
+});
+
+export const CampaignSyncSchema = z.object({
+  ad_account_id: z.string().min(1),
+  period_start: DateStringSchema,
+  period_end: DateStringSchema,
+  default_product_id: UuidSchema,
+});
+
+export type CampaignCreateInput = z.infer<typeof CampaignCreateSchema>;
+export type CampaignUpdateInput = z.infer<typeof CampaignUpdateSchema>;
+export type CampaignSyncInput = z.infer<typeof CampaignSyncSchema>;

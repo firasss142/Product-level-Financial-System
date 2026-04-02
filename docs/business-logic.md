@@ -166,7 +166,7 @@ All rates are calculated from real order data, not assumptions. Each KPI has a p
 | Delivery Rate | delivered ÷ shipped orders | All orders that reached 'deposit' status or beyond | Measures Navex success rate. Excludes orders rejected before shipping. |
 | Return Rate | (returned + to_be_returned) ÷ shipped orders | Same as Delivery Rate denominator | Return Rate = 1 − Delivery Rate. The #1 margin killer in COD. |
 | Exchange Rate | exchange orders ÷ delivered orders | Only successfully delivered orders | Measures packing quality and product-market fit |
-| Cost Per Lead (CPL) | Ad spend ÷ total leads | All non-duplicated orders from the campaign | Retrieved via Meta/TikTok MCP integration |
+| Cost Per Lead (CPL) | Ad spend ÷ total leads | All non-duplicated orders from the campaign | Retrieved via Meta MCP integration |
 | Cost Per Delivered Order | All direct costs ÷ delivered orders | Only delivered orders | Includes burden from returns, rejects, and failed leads |
 | Contribution Margin | Revenue − Direct Costs | Per product, per period | See Section 2.2 formula |
 | Net Profit | ∑ Contribution Margins − Overhead | Business-wide | See Section 2.3 formula |
@@ -202,7 +202,7 @@ Primary data source. No public API — data is obtained via web scraping of mult
 
 - createdAt, updatedAt
 
-## **5.2 Meta ****&**** TikTok Ads (Campaign Metrics)**
+## **5.2 Meta ****&****  Ads (Campaign Metrics)**
 
 Connected via MCP integration. Each campaign maps 1:1 to a product (99% of the time). For the rare mixed campaign, the system provides a manual override to split spend across products.
 
@@ -374,7 +374,7 @@ This section summarizes every configurable input, computed output, and data inte
 | --- | --- | --- | --- |
 | Converty (multiple accounts) | Web scraping (authenticated) | Orders, statuses, products | Manual sync (button) |
 | Meta Ads | MCP integration | Campaign spend, CPL, leads | Automatic |
-| TikTok Ads | MCP integration | Campaign spend, CPL, leads | Automatic |
+|  Ads | MCP integration | Campaign spend, CPL, leads | Automatic |
 | Navex Settlement | Manual input | Daily settlement amount | Daily |
 
 *End of Business Logic Specification v1.0*

@@ -44,6 +44,31 @@ export interface CampaignSpendAggregate {
   totalLeads: number;
 }
 
+/** One entry in a mixed campaign's spend_allocations JSONB array */
+export interface SpendAllocation {
+  product_id: string;
+  percentage: number; // 0–100, all entries must sum to 100
+}
+
+/** Raw row from campaigns table (API + admin page) */
+export interface CampaignRow {
+  id: string;
+  product_id: string;
+  product_name: string | null;
+  platform: string;
+  campaign_name: string | null;
+  campaign_id: string | null;
+  spend: number;
+  leads: number;
+  impressions: number;
+  clicks: number;
+  period_start: string;
+  period_end: string;
+  spend_allocations: SpendAllocation[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Layer 1 — Contribution Margin (per product per period)
 // ---------------------------------------------------------------------------
