@@ -211,7 +211,8 @@ export async function fetchCampaignSpend(
     .from("campaigns")
     .select("product_id, spend, leads, spend_allocations")
     .lte("period_start", endStr)
-    .gte("period_end", startStr);
+    .gte("period_end", startStr)
+    .limit(5000);
 
   if (error) throw new Error(error.message);
 
@@ -251,7 +252,8 @@ export async function fetchAllCampaignSpends(
     .from("campaigns")
     .select("product_id, spend, leads, spend_allocations")
     .lte("period_start", endStr)
-    .gte("period_end", startStr);
+    .gte("period_end", startStr)
+    .limit(5000);
 
   if (error) throw new Error(error.message);
 
@@ -283,13 +285,19 @@ export async function fetchAllCampaignSpends(
 // ---------------------------------------------------------------------------
 
 export async function fetchActiveProducts(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  storeIds?: string[]
 ): Promise<ProductRow[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("products")
-    .select("id, name, unit_cogs")
+    .select("id, name, unit_cogs, store_id")
     .eq("is_active", true);
 
+  if (storeIds && storeIds.length > 0) {
+    query = query.in("store_id", storeIds);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as ProductRow[];
 }

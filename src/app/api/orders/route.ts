@@ -10,6 +10,8 @@ export async function GET(request: Request) {
     const dateFrom = searchParams.get("date_from");
     const dateTo = searchParams.get("date_to");
     const showAll = searchParams.get("show_all") === "true";
+    const limit = Math.min(parseInt(searchParams.get("limit") ?? "500", 10), 1000);
+    const offset = Math.max(parseInt(searchParams.get("offset") ?? "0", 10), 0);
 
     const supabase = await createClient();
 
@@ -36,6 +38,8 @@ export async function GET(request: Request) {
       const end = dateTo.endsWith("T") ? dateTo : `${dateTo}T23:59:59.999Z`;
       query = query.lte("converty_created_at", end);
     }
+
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
     if (error) throw new Error(error.message);

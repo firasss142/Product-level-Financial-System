@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessProfitability } from "@/lib/calculations";
-import { fetchStuckOrders } from "@/lib/supabase/queries";
-import { fetchAllOrders } from "@/lib/calculations/queries";
+import { fetchStuckOrders, queryStoreIdsByAccount } from "@/lib/supabase/queries";
+import { fetchAllOrders, fetchOrdersByStoreIds } from "@/lib/calculations/queries";
 import type { Period } from "@/types/cost-model";
 
 /** Count exchange and delivered orders in a period — lightweight alternative to full profitability. */
 async function fetchExchangeRateCounts(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  period: Period
+  period: Period,
+  storeIds?: string[]
 ): Promise<{ exchangeCount: number; deliveredCount: number }> {
-  const orders = await fetchAllOrders(supabase, period);
+  const orders =
+    storeIds && storeIds.length > 0
+      ? await fetchOrdersByStoreIds(supabase, storeIds, period)
+      : await fetchAllOrders(supabase, period);
   let exchangeCount = 0;
   let deliveredCount = 0;
   for (const o of orders) {
@@ -25,6 +29,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const startStr = searchParams.get("start");
     const endStr = searchParams.get("end");
+    const accountId = searchParams.get("accountId");
 
     if (!startStr || !endStr) {
       return NextResponse.json({ error: "Paramètres start et end requis" }, { status: 400 });
@@ -44,9 +49,12 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
 
+    // Resolve store IDs for account filter (if provided)
+    const storeIds = accountId ? await queryStoreIdsByAccount(supabase, accountId) : undefined;
+
     const [profitability, prevCounts, stuckOrders] = await Promise.all([
-      getBusinessProfitability(period),
-      fetchExchangeRateCounts(supabase, prevPeriod),
+      getBusinessProfitability(period, storeIds),
+      fetchExchangeRateCounts(supabase, prevPeriod, storeIds),
       fetchStuckOrders(supabase),
     ]);
 

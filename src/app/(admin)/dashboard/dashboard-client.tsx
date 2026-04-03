@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, Button, useToast } from "@/components/ui";
 import { firstOfMonth, today, firstOfLastMonth, lastOfLastMonth } from "@/lib/dates";
 import { KpiStrip } from "./kpi-strip";
 import { OrderFunnel } from "./order-funnel";
 import { ProductGrid } from "./product-grid";
 import { AttentionSection } from "./attention-section";
+
+interface ConvertyAccount {
+  id: string;
+  email: string;
+  stores: { id: string; name: string }[];
+}
 
 interface KpiData {
   overallConfirmationRate: number | null;
@@ -70,11 +76,27 @@ export function DashboardClient() {
   const [endDate, setEndDate] = useState(today);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [accounts, setAccounts] = useState<ConvertyAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const selectedAccountLabel = useMemo(
+    () => accounts.find((a) => a.id === selectedAccountId)?.email,
+    [accounts, selectedAccountId]
+  );
+
+  // Fetch accounts for the filter selector
+  useEffect(() => {
+    fetch("/api/accounts")
+      .then((r) => r.json())
+      .then((d) => setAccounts((d as ConvertyAccount[]).filter((a) => a.stores?.length > 0)))
+      .catch(() => {/* silent — filter just won't show */});
+  }, []);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/dashboard?start=${startDate}&end=${endDate}`);
+      const params = new URLSearchParams({ start: startDate, end: endDate });
+      if (selectedAccountId) params.set("accountId", selectedAccountId);
+      const res = await fetch(`/api/dashboard?${params.toString()}`);
       if (!res.ok) throw new Error("Erreur de chargement");
       const json = (await res.json()) as DashboardResponse;
       setData(json);
@@ -83,7 +105,7 @@ export function DashboardClient() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, toast]);
+  }, [startDate, endDate, selectedAccountId, toast]);
 
   useEffect(() => {
     void fetchDashboard();
@@ -130,6 +152,23 @@ export function DashboardClient() {
             <Button variant="ghost" size="sm" onClick={setLastMonth}>
               Mois dernier
             </Button>
+            {accounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-navy mb-1.5">Compte</label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">Tous les comptes</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.email} ({a.stores.length} boutique{a.stores.length !== 1 ? "s" : ""})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -138,7 +177,11 @@ export function DashboardClient() {
 
       <OrderFunnel funnel={data?.funnel ?? null} loading={loading} />
 
-      <ProductGrid productDetails={data?.productDetails ?? []} loading={loading} />
+      <ProductGrid
+        productDetails={data?.productDetails ?? []}
+        loading={loading}
+        accountLabel={selectedAccountLabel}
+      />
 
       <AttentionSection stuckOrders={data?.stuckOrders ?? []} loading={loading} />
     </div>

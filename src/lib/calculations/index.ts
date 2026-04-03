@@ -16,6 +16,7 @@ import { computeProductKPIs, computeBusinessKPIs, computeDailySettlementKPIs } f
 import {
   fetchProductOrders,
   fetchAllOrders,
+  fetchOrdersByStoreIds,
   fetchCampaignSpend,
   fetchAllCampaignSpends,
   fetchActiveProducts,
@@ -73,15 +74,18 @@ export interface BusinessProfitabilityResult {
 }
 
 export async function getBusinessProfitability(
-  period: Period
+  period: Period,
+  storeIds?: string[]
 ): Promise<BusinessProfitabilityResult> {
   const supabase = await createClient();
   const settings = await getSettings();
 
   const [products, overheadCategories, allOrders, campaignSpendMap] = await Promise.all([
-    fetchActiveProducts(supabase),
+    fetchActiveProducts(supabase, storeIds),
     fetchOverheadCategories(supabase),
-    fetchAllOrders(supabase, period),
+    storeIds && storeIds.length > 0
+      ? fetchOrdersByStoreIds(supabase, storeIds, period)
+      : fetchAllOrders(supabase, period),
     fetchAllCampaignSpends(supabase, period),
   ]);
 
@@ -95,7 +99,7 @@ export async function getBusinessProfitability(
 
   // Single aggregation pass — reused for both product details and business KPIs
   const allAggregates: ProductOrderAggregates[] = [];
-  const productDetails: ProductProfitabilityResult[] = products.map((product) => {
+  const productDetails: ProductProfitabilityResult[] = products.map((product: ProductRow) => {
     const orders = ordersByProduct.get(product.id) ?? [];
     const aggregates = aggregateProductOrders(orders, product);
     allAggregates.push(aggregates);

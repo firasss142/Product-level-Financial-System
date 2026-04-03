@@ -14,7 +14,8 @@ export async function GET(
       .from("product_batches")
       .select("id, batch_number, quantity, unit_cogs, supplier, notes, cost_breakdown, created_at")
       .eq("product_id", productId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     if (error) throw new Error(error.message);
     return NextResponse.json(data ?? []);

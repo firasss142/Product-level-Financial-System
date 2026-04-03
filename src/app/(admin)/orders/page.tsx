@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -73,6 +73,7 @@ function OrdersPage() {
   const [showAll, setShowAll] = useState(false);
 
   const isFiltered = selectedStatus !== ALL || selectedProduct !== ALL || selectedStore !== ALL || !!dateFrom || !!dateTo || showAll;
+  const isMounted = useRef(false);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -97,7 +98,13 @@ function OrdersPage() {
   }, [selectedStatus, selectedProduct, selectedStore, dateFrom, dateTo, showAll, toast]);
 
   useEffect(() => {
-    void fetchOrders();
+    if (!isMounted.current) {
+      isMounted.current = true;
+      void fetchOrders();
+      return;
+    }
+    const timer = setTimeout(() => { void fetchOrders(); }, 400);
+    return () => clearTimeout(timer);
   }, [fetchOrders]);
 
   // Load stores + products for filters (independent, fire in parallel)

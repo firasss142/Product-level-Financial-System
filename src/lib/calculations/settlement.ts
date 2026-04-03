@@ -13,7 +13,7 @@ import {
   fetchAllOrders,
   fetchOrdersByStoreIds,
   aggregateProductOrders,
-  fetchCampaignSpend,
+  fetchAllCampaignSpends,
   fetchActiveProducts,
   fetchOverheadCategories,
   type ProductRow,
@@ -75,21 +75,19 @@ async function resolveProductRows(
   }
 
   // Fallback: if an order references a product not in the active list,
-  // fetch it directly so COGS is still computed
-  for (const pid of orderProductIds) {
-    if (!productMap.has(pid)) {
-      const { data } = await supabase
-        .from("products")
-        .select("id, name, unit_cogs")
-        .eq("id", pid)
-        .single();
-      if (data) {
-        productMap.set(data.id as string, {
-          id: data.id as string,
-          name: data.name as string,
-          unit_cogs: data.unit_cogs as number | null,
-        });
-      }
+  // batch-fetch all missing products in one query so COGS is still computed
+  const missingIds = Array.from(orderProductIds).filter((pid) => !productMap.has(pid));
+  if (missingIds.length > 0) {
+    const { data } = await supabase
+      .from("products")
+      .select("id, name, unit_cogs")
+      .in("id", missingIds);
+    for (const row of data ?? []) {
+      productMap.set(row.id as string, {
+        id: row.id as string,
+        name: row.name as string,
+        unit_cogs: row.unit_cogs as number | null,
+      });
     }
   }
 
@@ -112,7 +110,7 @@ export async function computeSettlement(
   if (!deal) throw new Error("Accord introuvable");
 
   // 2. Fetch orders in scope + all orders (for overhead ratio)
-  const [scopeOrders, allOrders, allProducts, overheadCategories, priorSettlements] =
+  const [scopeOrders, allOrders, allProducts, overheadCategories, priorSettlements, campaignSpendMap] =
     await Promise.all([
       fetchOrdersForScope(supabase, deal, period),
       // For business scope we reuse the same array; for other scopes we need the total
@@ -122,6 +120,7 @@ export async function computeSettlement(
       fetchActiveProducts(supabase),
       fetchOverheadCategories(supabase),
       querySettlementsByDeal(supabase, dealId),
+      fetchAllCampaignSpends(supabase, period),
     ]);
 
   // For business scope, allOrders === scopeOrders
@@ -165,7 +164,7 @@ export async function computeSettlement(
     if (!product) continue;
 
     const aggregates = aggregateProductOrders(orders, product);
-    const campaignSpend = await fetchCampaignSpend(supabase, pid, period);
+    const campaignSpend = campaignSpendMap.get(pid) ?? { productId: pid, totalSpend: 0, totalLeads: 0 };
     const margin = computeContributionMargin(aggregates, campaignSpend, settings, period);
 
     // Accumulate waterfall fields

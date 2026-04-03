@@ -135,6 +135,7 @@ function AccountsPage() {
       });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Erreur inconnue");
       setAccounts((prev) => prev.map((a) => a.id === account.id ? { ...a, is_active: !a.is_active } : a));
+      toast({ title: account.is_active ? "Compte désactivé" : "Compte activé", variant: "success" });
     } catch (err) {
       toast({ title: "Échec de la mise à jour", description: err instanceof Error ? err.message : undefined, variant: "error" });
     }
@@ -238,6 +239,7 @@ function AccountsPage() {
           stores: a.stores.map((s) => s.id === updated.id ? updated : s),
         }))
       );
+      toast({ title: store.is_active ? "Boutique désactivée" : "Boutique activée", variant: "success" });
     } catch (err) {
       toast({ title: "Échec de la mise à jour", description: err instanceof Error ? err.message : undefined, variant: "error" });
     }

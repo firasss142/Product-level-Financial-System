@@ -89,6 +89,7 @@ function RecuCell({ date, expectedAmount, initialValue, onSaved }: RecuCellProps
       });
       if (!res.ok) throw new Error("Erreur de sauvegarde");
       onSaved(date, num);
+      toast({ title: "Montant enregistré", variant: "success" });
     } catch {
       toast({ title: "Impossible de sauvegarder", variant: "error" });
     } finally {

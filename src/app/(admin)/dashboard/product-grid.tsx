@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Card, CardContent, Badge, EmptyState, SkeletonCard } from "@/components/ui";
 import { fmtPrice, fmtPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -15,9 +16,10 @@ interface ProductDetail {
 interface ProductGridProps {
   productDetails: ProductDetail[];
   loading: boolean;
+  accountLabel?: string;
 }
 
-export function ProductGrid({ productDetails, loading }: ProductGridProps) {
+export function ProductGrid({ productDetails, loading, accountLabel }: ProductGridProps) {
   if (loading) {
     return (
       <div>
@@ -40,9 +42,10 @@ export function ProductGrid({ productDetails, loading }: ProductGridProps) {
     );
   }
 
-  // Sort worst margin first
-  const sorted = [...productDetails].sort(
-    (a, b) => a.contributionMarginTotal - b.contributionMarginTotal
+  // Sort worst margin first — memoized to avoid O(n log n) on every render
+  const sorted = useMemo(
+    () => [...productDetails].sort((a, b) => a.contributionMarginTotal - b.contributionMarginTotal),
+    [productDetails]
   );
 
   return (
@@ -52,7 +55,16 @@ export function ProductGrid({ productDetails, loading }: ProductGridProps) {
         {sorted.map((product) => (
           <Card key={product.productId}>
             <CardContent>
-              <p className="text-sm font-semibold text-navy truncate">{product.productName}</p>
+              {accountLabel ? (
+                <div className="flex items-start justify-between gap-2 mb-0.5">
+                  <p className="text-sm font-semibold text-navy truncate">{product.productName}</p>
+                  <Badge variant="default" className="shrink-0 truncate max-w-[120px]">
+                    {accountLabel}
+                  </Badge>
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-navy truncate mb-0.5">{product.productName}</p>
+              )}
               <p
                 className={cn(
                   "text-2xl font-semibold tabular-nums mt-2",

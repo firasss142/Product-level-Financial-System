@@ -15,11 +15,12 @@ export async function GET() {
 
     if (dealError) throw new Error(dealError.message);
 
-    // Fetch latest settlement per investor (through deals)
+    // Fetch latest settlement per investor (through deals) — capped at 5000 rows
     const { data: settlements, error: settError } = await supabase
       .from("settlements")
       .select("deal_id, created_at, investment_deals!inner(investor_id)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(5000);
 
     if (settError) throw new Error(settError.message);
 
