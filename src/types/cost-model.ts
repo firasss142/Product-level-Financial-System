@@ -8,6 +8,14 @@ export interface Period {
   end: Date;
 }
 
+/** Build a Period from YYYY-MM-DD strings (inclusive both ends, UTC) */
+export function parsePeriod(startDate: string, endDate: string): Period {
+  return {
+    start: new Date(`${startDate}T00:00:00.000Z`),
+    end: new Date(`${endDate}T23:59:59.999Z`),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Aggregated order data (input to pure computation)
 // ---------------------------------------------------------------------------

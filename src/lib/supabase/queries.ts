@@ -280,6 +280,56 @@ export async function queryDealsByInvestor(
   }));
 }
 
+/** Fetch a single deal by ID */
+export async function queryDealById(
+  supabase: SupabaseClient,
+  dealId: string
+): Promise<InvestmentDeal | null> {
+  const { data, error } = await supabase
+    .from("investment_deals")
+    .select(
+      "id, investor_id, scope_type, scope_id, capital_amount, profit_share_rate, loss_share_rate, start_date, end_date, is_active, notes, created_at, updated_at"
+    )
+    .eq("id", dealId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id as string,
+    investor_id: data.investor_id as string,
+    scope_type: data.scope_type as InvestmentDeal["scope_type"],
+    scope_id: (data.scope_id as string | null) ?? null,
+    capital_amount: Number(data.capital_amount),
+    profit_share_rate: Number(data.profit_share_rate),
+    loss_share_rate: Number(data.loss_share_rate),
+    start_date: data.start_date as string,
+    end_date: (data.end_date as string | null) ?? null,
+    is_active: data.is_active as boolean,
+    notes: (data.notes as string | null) ?? null,
+    created_at: data.created_at as string,
+    updated_at: data.updated_at as string,
+  };
+}
+
+/** Fetch store IDs belonging to a Converty account */
+export async function queryStoreIdsByAccount(
+  supabase: SupabaseClient,
+  accountId: string
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("stores")
+    .select("id")
+    .eq("converty_account_id", accountId)
+    .eq("is_active", true);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((s) => s.id as string);
+}
+
 /** Fetch all settlements for a deal, ordered newest first */
 export async function querySettlementsByDeal(
   supabase: SupabaseClient,
@@ -288,7 +338,7 @@ export async function querySettlementsByDeal(
   const { data, error } = await supabase
     .from("settlements")
     .select(
-      "id, deal_id, period_start, period_end, snapshot, total_revenue, total_costs, net_profit, investor_share, created_at"
+      "id, deal_id, period_start, period_end, snapshot, total_revenue, total_costs, net_profit, capital_return_this_period, investor_share, created_at"
     )
     .eq("deal_id", dealId)
     .order("period_start", { ascending: false });
@@ -304,6 +354,7 @@ export async function querySettlementsByDeal(
     total_revenue: Number(s.total_revenue),
     total_costs: Number(s.total_costs),
     net_profit: Number(s.net_profit),
+    capital_return_this_period: Number(s.capital_return_this_period),
     investor_share: Number(s.investor_share),
     created_at: s.created_at as string,
   }));

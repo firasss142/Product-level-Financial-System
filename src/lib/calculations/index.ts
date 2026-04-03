@@ -24,6 +24,7 @@ import {
   aggregateProductOrders,
   type ProductRow,
 } from "./queries";
+export { computeSettlement, type SettlementResult } from "./settlement";
 
 // ---------------------------------------------------------------------------
 // Product profitability

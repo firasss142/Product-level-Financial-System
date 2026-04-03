@@ -69,6 +69,32 @@ export async function fetchAllOrders(
   return (data ?? []) as OrderRow[];
 }
 
+/**
+ * Fetch non-duplicated, non-test orders for specific store IDs in a period.
+ * Used for account-scoped settlement calculations.
+ */
+export async function fetchOrdersByStoreIds(
+  supabase: SupabaseClient,
+  storeIds: string[],
+  period: Period
+): Promise<OrderRow[]> {
+  if (storeIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      "id, store_id, product_id, reference, total_price, status, is_duplicated, is_exchange, is_test, cart, converty_created_at, variant_unit_count"
+    )
+    .in("store_id", storeIds)
+    .eq("is_duplicated", false)
+    .eq("is_test", false)
+    .gte("converty_created_at", period.start.toISOString())
+    .lte("converty_created_at", period.end.toISOString());
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as OrderRow[];
+}
+
 // ---------------------------------------------------------------------------
 // Pure-TS aggregation (single pass)
 // ---------------------------------------------------------------------------

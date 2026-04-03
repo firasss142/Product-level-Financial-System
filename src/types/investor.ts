@@ -74,6 +74,21 @@ export interface InvestmentDeal {
   updated_at: string;
 }
 
+/** Result of computeSettlement — used for previews and API responses */
+export interface SettlementResult {
+  waterfall: SettlementWaterfall;
+  total_revenue: number;
+  total_costs: number;
+  net_profit: number;
+  capital_invested: number;
+  capital_returned_to_date: number;
+  capital_return_this_period: number;
+  capital_remaining: number;
+  investor_share: number;
+  scope_order_count: number;
+  total_order_count: number;
+}
+
 /** Settlement snapshot row (immutable — INSERT only) */
 export interface Settlement {
   id: string;
@@ -84,6 +99,7 @@ export interface Settlement {
   total_revenue: number;
   total_costs: number;
   net_profit: number;
+  capital_return_this_period: number;
   investor_share: number;
   created_at: string;
 }
