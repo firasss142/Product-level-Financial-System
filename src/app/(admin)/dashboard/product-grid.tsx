@@ -9,6 +9,7 @@ interface ProductDetail {
   contributionMarginPerOrder: number | null;
   deliveredCount: number;
   returnRate: number | null;
+  exchangeRate: number | null;
 }
 
 interface ProductGridProps {
@@ -66,13 +67,18 @@ export function ProductGrid({ productDetails, loading }: ProductGridProps) {
                   {fmtPrice(product.contributionMarginPerOrder)} TND / commande
                 </p>
               )}
-              <div className="flex items-center gap-3 mt-3">
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <span className="text-sm text-warm-gray-600">
                   {product.deliveredCount} livrée{product.deliveredCount !== 1 ? "s" : ""}
                 </span>
                 {product.returnRate !== null && (
                   <Badge variant="returned">
                     {fmtPercent(product.returnRate)}% retour
+                  </Badge>
+                )}
+                {product.exchangeRate !== null && product.exchangeRate > 0 && (
+                  <Badge variant={product.exchangeRate > 0.1 ? "pending" : "default"}>
+                    {fmtPercent(product.exchangeRate)}% échange
                   </Badge>
                 )}
               </div>

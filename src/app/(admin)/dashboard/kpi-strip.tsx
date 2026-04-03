@@ -7,6 +7,8 @@ interface KpiData {
   overallReturnRate: number | null;
   totalContributionMargin: number;
   netProfit: number;
+  overallExchangeRate: number | null;
+  exchangeRateTrend: "up" | "down" | "flat" | null;
 }
 
 interface KpiStripProps {
@@ -21,16 +23,24 @@ function marginColor(value: number): string {
 export function KpiStrip({ kpis, loading }: KpiStripProps) {
   if (loading || !kpis) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
       </div>
     );
   }
 
+  // Exchange rate trend: 'up' means rate increased (worse), 'down' means decreased (better)
+  const exchangeTrend =
+    kpis.exchangeRateTrend === "up"
+      ? { direction: "up" as const, value: "vs mois préc." }
+      : kpis.exchangeRateTrend === "down"
+      ? { direction: "down" as const, value: "vs mois préc." }
+      : undefined;
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
       <StatCard
         value={fmtPercent(kpis.overallConfirmationRate)}
         suffix="%"
@@ -46,6 +56,21 @@ export function KpiStrip({ kpis, loading }: KpiStripProps) {
         suffix="%"
         label="Taux de retour"
         valueClassName="text-terracotta"
+      />
+      <StatCard
+        value={
+          kpis.overallExchangeRate !== null
+            ? fmtPercent(kpis.overallExchangeRate)
+            : "—"
+        }
+        suffix={kpis.overallExchangeRate !== null ? "%" : ""}
+        label="Taux d'échange"
+        valueClassName={
+          kpis.overallExchangeRate !== null && kpis.overallExchangeRate > 0.1
+            ? "text-terracotta"
+            : "text-navy"
+        }
+        trend={exchangeTrend}
       />
       <StatCard
         value={fmtPrice(kpis.totalContributionMargin)}

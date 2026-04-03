@@ -104,6 +104,7 @@ export interface ContributionMargin {
   // Revenue
   revenue: number;
   deliveredCount: number;
+  exchangeCount: number;
 
   // 8 direct cost components (totals for the period)
   totalCogs: number;

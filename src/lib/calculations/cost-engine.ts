@@ -175,6 +175,7 @@ export function computeContributionMargin(
     period,
     revenue: totalRevenue,
     deliveredCount,
+    exchangeCount,
     totalCogs,
     totalDeliveryFee,
     totalPackingCost,

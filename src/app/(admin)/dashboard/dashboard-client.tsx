@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, Button, useToast } from "@/components/ui";
+import { firstOfMonth, today, firstOfLastMonth, lastOfLastMonth } from "@/lib/dates";
 import { KpiStrip } from "./kpi-strip";
 import { OrderFunnel } from "./order-funnel";
 import { ProductGrid } from "./product-grid";
@@ -13,6 +14,8 @@ interface KpiData {
   overallReturnRate: number | null;
   totalContributionMargin: number;
   netProfit: number;
+  overallExchangeRate: number | null;
+  exchangeRateTrend: "up" | "down" | "flat" | null;
 }
 
 interface FunnelData {
@@ -33,6 +36,7 @@ interface ProductDetail {
   confirmationRate: number | null;
   deliveryRate: number | null;
   returnRate: number | null;
+  exchangeRate: number | null;
   totalLeads: number;
   confirmedOrders: number;
   shippedOrders: number;
@@ -55,27 +59,6 @@ interface DashboardResponse {
   stuckOrders: StuckOrder[];
 }
 
-function firstOfMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function firstOfLastMonth(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function lastOfLastMonth(): string {
-  const d = new Date();
-  d.setDate(0); // last day of previous month
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 const INPUT_CLASS =
   "rounded-lg border border-warm-gray-200 bg-white px-3 py-2 text-sm text-navy focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none transition-colors";

@@ -18,8 +18,10 @@ import {
   type SelectOption,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { fmtNumber, fmtDateMedium } from "@/lib/format";
+import { fmtNumber, fmtPrice, fmtPercent, fmtDateMedium } from "@/lib/format";
+import { firstOfMonth, today, firstOfLastMonth, lastOfLastMonth } from "@/lib/dates";
 import type { ProductBatch as Batch } from "@/types/product";
+import type { VariantProfitabilityRow } from "@/app/api/products/[id]/variant-profitability/route";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -640,6 +642,282 @@ function VariantMapSection({
   );
 }
 
+// ── Section 5: Variant Profitability ─────────────────────────────────────────
+
+function variantMarginColor(pct: number | null): string {
+  if (pct === null) return "text-warm-gray-400";
+  if (pct >= 20) return "text-emerald";
+  if (pct >= 0) return "text-amber-600";
+  return "text-terracotta";
+}
+
+const DATE_INPUT_CLASS =
+  "rounded-lg border border-warm-gray-200 bg-white px-3 py-2 text-sm text-navy focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none transition-colors";
+
+function VariantProfitabilitySection({ productId }: { productId: string }) {
+  const { toast } = useToast();
+  const [startDate, setStartDate] = useState(firstOfMonth);
+  const [endDate, setEndDate] = useState(today);
+  const [rows, setRows] = useState<VariantProfitabilityRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(
+    async (start: string, end: string) => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/products/${productId}/variant-profitability?start=${start}&end=${end}`
+        );
+        if (!res.ok) throw new Error("Erreur de chargement");
+        const json = (await res.json()) as { rows: VariantProfitabilityRow[] };
+        setRows(json.rows);
+      } catch {
+        toast({ title: "Impossible de charger les variantes", variant: "error" });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [productId, toast]
+  );
+
+  useEffect(() => {
+    void fetchData(startDate, endDate);
+  }, [fetchData, startDate, endDate]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Rentabilité par variante</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-warm-gray-500 mb-1">De</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className={DATE_INPUT_CLASS}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-warm-gray-500 mb-1">À</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className={DATE_INPUT_CLASS}
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setStartDate(firstOfMonth()); setEndDate(today()); }}
+          >
+            Ce mois
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setStartDate(firstOfLastMonth()); setEndDate(lastOfLastMonth()); }}
+          >
+            Mois dernier
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="space-y-2 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-9 bg-warm-gray-100 rounded" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState title="Aucune commande livrée sur cette période" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-warm-gray-200">
+                  <th className="text-left px-0 py-2 text-xs font-medium text-warm-gray-500">
+                    Variante
+                  </th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-warm-gray-500 whitespace-nowrap">
+                    Prix moy. (TND)
+                  </th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-warm-gray-500 whitespace-nowrap">
+                    Qté/cmd
+                  </th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-warm-gray-500 whitespace-nowrap">
+                    COGS (TND)
+                  </th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-warm-gray-500 whitespace-nowrap">
+                    Marge (TND)
+                  </th>
+                  <th className="text-right px-0 py-2 text-xs font-medium text-warm-gray-500 whitespace-nowrap">
+                    Marge (%)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const avgRevenue = row.deliveredCount > 0 ? row.revenue / row.deliveredCount : 0;
+                  const avgCogs = row.deliveredCount > 0 ? row.cogs / row.deliveredCount : 0;
+                  const avgMargin = row.deliveredCount > 0 ? row.margin / row.deliveredCount : 0;
+                  return (
+                    <tr key={row.sku} className="border-b border-warm-gray-100">
+                      <td className="py-3 pr-4 text-navy font-medium">
+                        {row.sku}
+                        <span className="ml-2 text-xs text-warm-gray-400 font-normal">
+                          ×{row.deliveredCount}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums text-navy">
+                        {fmtPrice(avgRevenue)}
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums text-navy">
+                        {row.unitCount}
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums text-warm-gray-600">
+                        {fmtPrice(avgCogs)}
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums font-semibold text-navy">
+                        {fmtPrice(avgMargin)}
+                      </td>
+                      <td className={cn("py-3 text-right tabular-nums font-semibold", variantMarginColor(row.marginPct))}>
+                        {row.marginPct !== null ? `${fmtPercent(row.marginPct / 100)}%` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="text-xs text-warm-gray-400 mt-3">
+              Marge = revenu − COGS − coûts proportionnels (livraison, emballage, Converty, pub, charges)
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Section 6: Damaged Returns ────────────────────────────────────────────────
+
+function frenchMonthName(month: number): string {
+  const names = [
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+  ];
+  return names[month - 1] ?? "";
+}
+
+function DamagedReturnsSection({ productId }: { productId: string }) {
+  const { toast } = useToast();
+  // Derived at render time — stable within a month; month boundary edge case is acceptable
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  const [count, setCount] = useState(0);
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/products/${productId}/damaged-returns?year=${year}&month=${month}`)
+      .then((r) => r.json() as Promise<{ count: number; notes: string | null }>)
+      .then((data) => {
+        setCount(data.count ?? 0);
+        setNotes(data.notes ?? "");
+      })
+      .catch(() => { /* fetch failure is non-critical; UI defaults to count=0 */ })
+      .finally(() => setLoading(false));
+  }, [productId, year, month]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/products/${productId}/damaged-returns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count, notes: notes.trim() || null, year, month }),
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? "Erreur inconnue");
+      }
+      toast({ title: "Retours endommagés enregistrés", variant: "success" });
+    } catch (err) {
+      toast({
+        title: "Échec de l'enregistrement",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          Retours endommagés — {frenchMonthName(month)} {year}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xs text-warm-gray-500 mb-4">
+          Compteur informatif uniquement. N&apos;affecte pas la rentabilité (les retours
+          non endommagés réintègrent le stock).
+        </p>
+        {loading ? (
+          <div className="animate-pulse h-16 bg-warm-gray-100 rounded" />
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setCount((c) => Math.max(0, c - 1))}
+                className="w-10 h-10 rounded-full border border-warm-gray-200 flex items-center justify-center text-xl text-navy hover:bg-warm-gray-50 transition-colors cursor-pointer"
+                aria-label="Diminuer"
+              >
+                −
+              </button>
+              <span className="text-4xl font-bold tabular-nums text-navy w-16 text-center">
+                {count}
+              </span>
+              <button
+                onClick={() => setCount((c) => c + 1)}
+                className="w-10 h-10 rounded-full border border-warm-gray-200 flex items-center justify-center text-xl text-navy hover:bg-warm-gray-50 transition-colors cursor-pointer"
+                aria-label="Augmenter"
+              >
+                +
+              </button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-navy mb-1.5">
+                Notes (optionnel)
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Ex. : défaut de couture, emballage abîmé…"
+                className="w-full rounded-lg border border-warm-gray-200 bg-white px-3 py-2 text-sm text-navy focus:border-navy focus:ring-1 focus:ring-navy focus:outline-none transition-colors placeholder:text-warm-gray-400 resize-none"
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => void handleSave()} loading={saving}>
+                Enregistrer
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 function ProductDetailPage() {
@@ -803,6 +1081,10 @@ function ProductDetailPage() {
         initialMap={product.variant_quantity_map}
         onSave={handleVariantMapSave}
       />
+
+      <VariantProfitabilitySection productId={product.id} />
+
+      <DamagedReturnsSection productId={product.id} />
     </div>
   );
 }
